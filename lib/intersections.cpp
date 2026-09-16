@@ -1060,6 +1060,11 @@ void Volume::translate(Vec3i delta) {
 		planes[i].translate(toLocal(delta, i));
 }
 
+void Volume::translate(Vec3f d) {
+	Vec3i delta(int(round(d[0]/step)), int(round(d[1]/step)), int(round(d[2]/step)));
+	translate(delta);
+}
+
 
 bool Volume::checkIntersectionParity() const {
 	for(int i = 0; i < 3; i++) {

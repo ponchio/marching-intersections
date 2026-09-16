@@ -3,14 +3,14 @@
 
 #include "vec.h"
 
-template <class Pos3> struct Box3 {
-	Pos3 min, max;
+template <class Vec3> struct Box3 {
+	Vec3 min, max;
 	Box3() {
 		SetNull();
 	}
-	Box3(const Pos3 &mi, const Pos3f &ma): min(mi), max(ma) {}
+	Box3(const Vec3 &mi, const Vec3 &ma): min(mi), max(ma) {}
 
-	void Set(const Pos3f &p) {
+	void Set(const Vec3 &p) {
 		min = max = p;
 	}
 	void SetNull() {
@@ -20,7 +20,7 @@ template <class Pos3> struct Box3 {
 	bool IsNull() const {
 		return min[0] > max[0] || min[1] > max[1] || min[2] > max[2];
 	}
-	void Add(const Pos3 &p) {
+	void Add(const Vec3 &p) {
 		if(IsNull())
 			Set(p);
 		else {
@@ -48,10 +48,10 @@ template <class Pos3> struct Box3 {
 			Add(b.max);
 		}
 	}
-	bool IsIn(const Pos3 &p) const {
+	bool IsIn(const Vec3 &p) const {
 		return min[0] <= p[0] && p[0] <= max[0] && min[1] <= p[1] && p[1] <= max[1] && min[2] <= p[2] && p[2] <= max[2];
 	}
-	void Intersect( const Box3<Pos3> & b ) {
+	void Intersect( const Box3<Vec3> & b ) {
 		if(min[0] < b.min[0]) min[0] = b.min[0];
 		if(min[1] < b.min[1]) min[1] = b.min[1];
 		if(min[2] < b.min[2]) min[2] = b.min[2];
@@ -66,10 +66,14 @@ template <class Pos3> struct Box3 {
 	inline auto DimY() const { return max[1] - min[1]; }
 	inline auto DimZ() const { return max[2] - min[2]; }
 	inline auto Volume() const { return DimX() * DimY() * DimZ(); }
+	inline auto Diag() const { 
+		return std::sqrt(DimX()*DimX() + DimY()*DimY() + DimZ()*DimZ());
+	}
+	Vec3 Center() const { return (min + max)*0.5; }
 };
 
 using Box3i = Box3<Pos3i>;
-using Box3f = Box3<Pos3f>;
+using Box3f = Box3<Vec3f>;
 
 template <class Pos2> struct Box2 {
 	Pos2 min, max;

@@ -37,6 +37,7 @@ void McTable::test2(){
 int McTable::table[256][16];
 int McTable::polygonCount[256];
 int McTable::polygonOfEdge[256][12];
+int McTable::isto[10];
 
 
 void McTable::computePolygonsFromSkretch(){

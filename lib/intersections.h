@@ -57,6 +57,7 @@ public:
 
 	/* spatial transformations */
 	void translate(Vec3i d);
+	void translate(Vec3f d);
 	void rotateX( int mult_of_90_deg ); // [unimplemented]
 	void rotateY( int mult_of_90_deg ); // [unimplemented]
 	void rotateZ( int mult_of_90_deg ); // [unimplemented]
@@ -141,7 +142,7 @@ void Volume::fromImplicit(Implicit function, float _step ) {
 	Box3f boxf = function.box();
 	for(int k = 0; k < 3; k++) {
 		box.min[k] = floor(boxf.min[k]/step);
-		box.max[k] = ceil(boxf.max[k]/step) + 1;
+		box.max[k] = ceil(boxf.max[k]/step) + 1; //max is excluded to avoids <= all the time.
 	}
 	resize(box);
 	for(int i = 0; i < 3; i++) {

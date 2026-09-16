@@ -68,7 +68,9 @@ public:
 
 	void push_back(const Intersection &i) { start[(*final_position)++] = i; }
 
+	//join intervals if end == start of the next.
 	int cleanUp(const Line &a);
+
 	int scaleAndCleanup(const Line &a, int scale, int add);
 	void scale(const Line &a, int scale, int add);
 	void unification(const Line &a, const Line &b); //damn you, reserved 'union' keyword!

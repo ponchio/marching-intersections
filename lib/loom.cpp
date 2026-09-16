@@ -76,10 +76,10 @@ void Loom::init(FourLinesX &f, int u, int v){
 	int w = p.width;
 	int wind[4] = { ind, ind+1, ind+w, ind+w+1};
 
-	for (int j=0; j<4; j++) {
+	for (int j=0; j < 4; j++) {
 		f[j] = p.indices[ wind[j]+1 ] -1;
 		f.last[j] = p.indices[ wind[j] ];
-		f.d[j] = (f[j]<f.last[j])? UNDEF : (int)floor(p.intersections[ f[j] ].p);
+		f.d[j] = (f[j] < f.last[j])? UNDEF : (int)floor(p.intersections[ f[j] ].p);
 	}
 }
 
@@ -132,16 +132,16 @@ void Loom::doLineX(int y, int z, std::vector<int>& faces ) {
 	while (1) {
 		// find next intersection on the 4 lines
 		int x = std::max( std::max(f.d[0],f.d[1]), std::max(f.d[2],f.d[3]) );
-		if (x==UNDEF) break; // line over
+		if (x == UNDEF) break; // line over
 
 		CubeConf cube;
 
-		for (int i=0; i<4; i++) {
+		for (int i = 0; i < 4; i++) {
 			if ( f.d[i] == x ) {
-				cube.mask |= (0x01<<(i*2+ (f[i] & 1) )); // set one vertex as present
+				cube.mask |= (0x01<<(i*2 + (f[i] & 1) )); // set one vertex as present
 				cube.edges[i] = (f[i]--) ;
 
-				f.d[i] = (f[i]<f.last[i]) ? UNDEF : (int)floor(p.intersections[ f[i] ].p);
+				f.d[i] = (f[i] < f.last[i]) ? UNDEF : (int)floor(p.intersections[ f[i] ].p);
 
 			}  else {
 				if (f[i] & 1) cube.mask |= (0x03<<(i*2)); // all inside: set two vertices as present
@@ -284,8 +284,8 @@ void Loom::completeSideArray( int z, std::vector<int> &faces ){
 void Loom::completeBottomGrid( std::vector<int> &faces ){
 	static CubeConf dummy;
 
-	for (int y=0; y<dimY-1; y++)
-		for (int x=0; x<dimX-1; x++){
+	for (int y = 0; y < dimY-1; y++)
+		for (int x=0; x < dimX-1; x++){
 			doLineZ( x, y, UNDEF, dummy, faces ); // UNDEF => do line to end
 		}
 }
@@ -299,9 +299,9 @@ void Loom::weave(std::vector<int> &faces){
 
 	initBottomGrid();
 
-	for (int z = dimZ-2; z>=0; z--) {
+	for (int z = dimZ-2; z >= 0; z--) {
 		initSideArray(z);
-		for (int y = dimY-2; y>=0; y--) {
+		for (int y = dimY-2; y >= 0; y--) {
 			doLineX( y, z , faces );
 		}
 
