@@ -39,14 +39,14 @@ void rotate(std::vector<Vec3f> &vert) {
 
 float diagLen(const std::vector<Vec3f> &vert){
 	Box3f box;
-	for(uint i = 0; i < vert.size(); i++)
+	for(unsigned int i = 0; i < vert.size(); i++)
 		box.Add(vert[i]);
 	return box.Diag();
 }
 
 Vec3f center(std::vector<Vec3f> &vert) {
 	Box3f box;
-	for(uint i = 0; i < vert.size(); i++)
+	for(unsigned int i = 0; i < vert.size(); i++)
 		box.Add(vert[i]);
 
 	translate(vert, -box.Center());

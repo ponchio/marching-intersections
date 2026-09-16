@@ -259,7 +259,7 @@ void Loom::doLineZ(int x, int y, int targetZ,
 
 void Loom::initSideArray(int z){
 	sideArray.resize( dimX );
-	for (uint i=0; i<sideArray.size(); i++) {
+	for (unsigned int i=0; i<sideArray.size(); i++) {
 		init( sideArray[i], z, i );
 	}
 }

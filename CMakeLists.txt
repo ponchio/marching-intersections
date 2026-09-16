@@ -6,9 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build library and related targets in lib/
 add_subdirectory(lib)
-
-# Build server
-add_subdirectory(server)
+add_subdirectory(wasm)
 
 # Top-level executable that uses the library
 add_executable(mesh2mi ${CMAKE_SOURCE_DIR}/lib/main.cpp)
@@ -17,3 +15,5 @@ target_link_libraries(mesh2mi PRIVATE marching_lib)
 install(TARGETS marching_lib mesh2mi
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin)
+
+

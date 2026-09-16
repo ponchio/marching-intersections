@@ -4,7 +4,6 @@
 #include "log.h"
 #include "vec.h"
 #include "box.h"
-
 #include "plane.h"
 
 #include <vector>
@@ -159,7 +158,7 @@ void Volume::fromImplicit(Implicit function, float _step ) {
 				p.intersections.resize(p.intersections.size() + intersections.size());
 
 				OutputLine output = p.output(index++);
-				for(uint k =0 ; k < intersections.size(); k++)
+				for(unsigned int k =0 ; k < intersections.size(); k++)
 #if STORE_NORMALS
 					output.push_back(Intersection(intersections[k]/step,normals[k]));
 #else

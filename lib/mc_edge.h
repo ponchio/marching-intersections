@@ -3,8 +3,6 @@
 
 #include <vector>
 
-typedef unsigned int uint;
-
 // a class used only by the obsolete triangulate Old:
 // a MC table indexed by edge rather than by vertice.
 

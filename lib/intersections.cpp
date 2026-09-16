@@ -329,7 +329,7 @@ void Plane::fillTriangle(const Pos3f &af, const Pos3f &bf, const Pos3f &cf, std:
 
 void Plane::accumulateLengths() {
 	int count = 0;
-	for(uint i = 0; i < indices.size(); i++) {
+	for(unsigned int i = 0; i < indices.size(); i++) {
 		int len = indices[i];
 		indices[i] = count;
 		count += len;
@@ -337,7 +337,7 @@ void Plane::accumulateLengths() {
 }
 
 void Plane::allocate() {
-	const uint NaNi = 0xffc00000;;
+	const unsigned int NaNi = 0xffc00000;;
 	const float NaN = *(float *)&NaNi;
 	intersections.resize(0);
 #if STORE_NORMALS
@@ -468,7 +468,7 @@ void Volume::fromSweep(const std::vector<Pos3f> &verts, const std::vector<int> &
 	Vec3f dir = end - start;
 
 	std::vector<Pos3f> new_verts(verts.size()*2);
-	for(uint i = 0; i < verts.size(); i++) {
+	for(unsigned int i = 0; i < verts.size(); i++) {
 		new_verts[i] = verts[i] + start;
 		new_verts[verts.size() + i] = verts[i] + end;
 	}
@@ -477,7 +477,7 @@ void Volume::fromSweep(const std::vector<Pos3f> &verts, const std::vector<int> &
 	//classify faces and find edges
 	std::vector<int> new_faces(faces.size());
 	std::vector<bool> orientation(faces.size()/3, false);
-	for(uint i = 0; i < faces.size(); i += 3) {
+	for(unsigned int i = 0; i < faces.size(); i += 3) {
 		const Pos3f &a = verts[faces[i+0]];
 		const Pos3f &b = verts[faces[i+1]];
 		const Pos3f &c = verts[faces[i+2]];
@@ -501,7 +501,7 @@ void Volume::fromSweep(const std::vector<Pos3f> &verts, const std::vector<int> &
 	}
 	//find silhouette edges edges and sweep them
 	std::sort(edges.begin(), edges.end());
-	for(uint i = 0; i < edges.size()-1; i++) {
+	for(unsigned int i = 0; i < edges.size()-1; i++) {
 		Edge &e = edges[i];
 		if(e == edges[i+1]) {
 			new_faces.push_back(e.v0);
@@ -975,7 +975,7 @@ void Volume::sweep(const Volume &v, Vec3f start, Vec3f end, int subsample) {
 			for(int u = p.box.min[0]; u < p.box.max[0]; u++, j++) {
 				int len_previous = 0;
 
-				for(uint k = 0; k < line.size(); k++) {
+				for(unsigned int k = 0; k < line.size(); k++) {
 					Pos3i d = toLocal(line[k], i);
 					Line input = pa.at(u*subsample - d[0], v*subsample - d[1]);
 					if(input.size() == 0) continue;
@@ -1045,7 +1045,7 @@ void Volume::subsampled(const Volume &a, int stepdiv, Vec3i offset) {
 }
 
 void Plane::translate(Vec3i d) {
-	for(uint i = 0; i < intersections.size(); i++)
+	for(unsigned int i = 0; i < intersections.size(); i++)
 		intersections[i].p += d[2];
 	box.min[0] += d[0];
 	box.min[1] += d[1];
@@ -1140,7 +1140,7 @@ bool Volume::checkConsistency() const {
 void Volume::adjustNormalsForSweep( Vec3f d ){
 
 	for (int p=0; p<3; p++)
-		for (uint i=0; i<planes[p].intersections.size(); i++) {
+		for (unsigned int i=0; i<planes[p].intersections.size(); i++) {
 			Vec3f &n = planes[p].intersections[i].n;
 			//if (n*d>0)
 			n = Vec3f(0,0,0);//(d^n^d).normalized();
@@ -1232,7 +1232,7 @@ int Volume::cleanUp() {
 		if(p.indices.size() == 1) continue;
 
 		Line next_line = p.at(0);
-		for(uint j = 0; j < p.indices.size()-1; j++) {
+		for(unsigned int j = 0; j < p.indices.size()-1; j++) {
 			Line line = next_line;
 			if(j != p.indices.size()-1)
 				next_line = p.at(j+1);

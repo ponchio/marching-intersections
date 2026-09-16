@@ -1,0 +1,38 @@
+{
+  "name": "marching-intersections",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/marching_lib_wasm.js",
+  "scripts": {
+    "build:wasm": "bash build-wasm.sh",
+    "dev": "vite",
+    "build": "npm run build:wasm && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "three": "^0.160.1",
+    "vite": "^5.4.21",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.6.0"
+  },
+  "description": "Marching intersection C++ and JS library.",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ponchio/marching-intersections.git"
+  },
+  "keywords": [
+    "marching",
+    "intersections",
+    "meshing",
+    "volume"
+  ],
+  "author": "Federico Ponchio, Marco Tarini",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/ponchio/marching-intersections/issues"
+  },
+  "homepage": "https://github.com/ponchio/marching-intersections#readme"
+}
