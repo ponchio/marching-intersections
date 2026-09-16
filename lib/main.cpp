@@ -1,12 +1,14 @@
 #include "vec.h"
 #include "box.h"
-#include <QFile>
-#include <QTextStream>
-#include <QString>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <chrono>
 #include "log.h"
 
 #include "intersections.h"
+#include "mesh_io.h"
 
 // Small cross-platform timer replacing QTime usage
 struct Timer {
@@ -16,205 +18,6 @@ struct Timer {
 	void restart() { t = clock::now(); }
 	long long elapsed() const { return std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t).count(); }
 };
-
-void loadObj(QString filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
-	char buffer[1024];
-	QFile file(filename);
-	if(!file.open(QFile::ReadOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-
-	while(1) {
-		int s = file.readLine(buffer, 1024);
-		if(s == -1)                     //end of filebottom_corners[i] = bottom_vert[i]
-			break;
-		if(s == 0) continue;            //skip empty lines
-
-		if(buffer[0] == '#')            //skip comments
-			continue;
-		buffer[s] = '\0';               //terminating line, readLine wont do this.
-
-		if(buffer[0] == 'v') {          //vertex
-			if(buffer[1] == ' ') {      //skip other properties
-				Pos3f v;
-				int n = sscanf(buffer, "v %f %f %f", &(v[0]), &(v[1]), &(v[2]));
-				if(n != 3) throw QString("Error parsing vertex line: %1").arg(buffer);
-				vert.push_back(v);
-
-			}//skipping other properties in OBJ
-			continue;
-		}
-		if(buffer[0] == 'f') {
-			int f[4];
-			int res=sscanf(buffer, "f %d %d %d %d", &f[0], &f[1], &f[2], &f[3]);
-			if (res !=4 && res != 3) {
-				int dummy;
-				res=sscanf(buffer, "f %d//%d %d//%d %d//%d %d//%d", &f[0], &dummy, &f[1], &dummy,  &f[2] , &dummy ,  &f[3] , &dummy);
-				if(res != 8 && res != 6)
-					throw QString("Could not parse face: %1").arg(buffer);\
-					res /=2;
-			}
-			if (res == 3) {
-				for(int i = 0; i < 3; i++) //obj indexes start from 1
-					face.push_back(f[i] -1);
-			}
-			if (res == 4) {
-				for(int i = 0; i < 3; i++) face.push_back(f[i] -1);
-				for(int i = 2; i < 5; i++) face.push_back(f[i%4] -1);
-			}
-
-		}
-	}
-}
-
-void saveObj(QString filename, std::vector<Vec3f> &vert, std::vector<Vec3f> &norm, std::vector<int> &face) {
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-	QTextStream stream(&file);
-
-
-	for(size_t i = 0; i < vert.size(); i++) {
-		Pos3f &v = vert[i];
-		stream << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
-
-		Vec3f &n = norm[i];
-		stream << "vn " << n[0] << " " << n[1] << " " << n[2] << "\n";
-	}
-}
-
-void savePly(QString filename, std::vector<Vec3f> &vert, std::vector<Vec3f> &norm, std::vector<int> &face) {
-
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-	QTextStream stream(&file);
-
-	stream << "ply\nformat ascii 1.0\n";
-	stream << "element vertex " << vert.size() << "\n";
-	stream << "property float x\n" "property float y\n" "property float z\n";
-	stream << "property float nx\n" "property float ny\n" "property float nz\n";
-	//stream << "element face " << face.size() << "\n";
-	//stream << "property list uchar int vertex_indices\n";
-	stream << "end_header\n";
-
-	for(size_t i = 0; i < vert.size(); i++) {
-		Pos3f &v = vert[i];
-		stream << v[0] << " " << v[1] << " " << v[2] << " ";
-
-		Vec3f &n = norm[i];
-		stream << n[0] << " " << n[1] << " " << n[2] << "\n";
-	}
-
-}
-
-void savePlyBinCloud(QString filename, std::vector<Vec3f> &vert, std::vector<Vec3f> &norm) {
-
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-	{
-		QTextStream stream(&file);
-
-		stream << "ply\nformat binary_little_endian 1.0\n";
-		stream << "element vertex " << vert.size() << "\n";
-		stream << "property float x\n" "property float y\n" "property float z\n";
-		stream << "property float nx\n" "property float ny\n" "property float nz\n";
-		stream << "end_header\n";
-	}
-
-
-	for(size_t i = 0; i < vert.size(); i++) {
-		Pos3f &v = vert[i];
-		file.write((char *)&v, 3*4);
-
-		Vec3f &n = norm[i];
-		file.write((char *)&n, 3*4);
-	}
-
-}
-
-void savePlyBinMesh(QString filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
-
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-	{
-		QTextStream stream(&file);
-
-		stream << "ply\nformat binary_little_endian 1.0\n";
-		stream << "element vertex " << vert.size() << "\n";
-		stream << "property float x\n" "property float y\n" "property float z\n";
-		stream << "element face " << face.size()/3 << "\n";
-		stream << "property list uchar int vertex_indices\n";
-		stream << "end_header\n";
-	}
-
-	file.write((char *)&*vert.begin(), vert.size()*3*4);
-
-	char n = 3;
-	for(size_t i = 0; i < face.size(); i += 3) {
-		file.write( &n, 1);
-		file.write((char *)&(face[i]), 3*4);
-	}
-}
-
-void savePlyAsciiMesh(QString filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
-
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-
-	QTextStream stream(&file);
-
-	stream << "ply\nformat ascii 1.0\n";
-	stream << "element vertex " << vert.size() << "\n";
-	stream << "property float x\n" "property float y\n" "property float z\n";
-	stream << "element face " << face.size()/3 << "\n";
-	stream << "property list uchar int vertex_indices\n";
-	stream << "end_header\n";
-
-
-	//file.write((char *)&*vert.begin(), vert.size()*3*4);
-
-	for(size_t i = 0; i < vert.size(); i++) {
-		Pos3f &v = vert[i];
-		stream << v[0] << " " << v[1] << " " << v[2] << "\n";
-	}
-	for(size_t i = 0; i < face.size(); i += 3) {
-		stream << 3 << " " << face[i] << " " << face[i+1] << " " << face[i+2] << "\n";
-	}
-
-}
-
-void savePlyAsciiQuadMesh(QString filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
-
-	QFile file(filename);
-	if(!file.open(QFile::WriteOnly))
-		throw QString("Could not open file '%1' error: %2").arg(filename).arg(file.errorString());
-
-	QTextStream stream(&file);
-
-	stream << "ply\nformat ascii 1.0\n";
-	stream << "element vertex " << vert.size() << "\n";
-	stream << "property float x\n" "property float y\n" "property float z\n";
-	stream << "element face " << face.size()/2 << "\n";
-	stream << "property list uchar int vertex_indices\n";
-	stream << "end_header\n";
-
-
-	//file.write((char *)&*vert.begin(), vert.size()*3*4);
-
-	for(size_t i = 0; i < vert.size(); i++) {
-		Pos3f &v = vert[i];
-		stream << v[0] << " " << v[1] << " " << v[2] << "\n";
-	}
-	for(size_t i = 0; i < face.size(); i += 4) {
-		stream << 3 << " " << face[i] << " " << face[i+1] << " " << face[i+2] << "\n";
-		stream << 3 << " " << face[i+2] << " " << face[i+3] << " " << face[i] << "\n";
-	}
-
-}
-
 
 void rescale(std::vector<Vec3f> &vert, float factor) {
 	for(size_t i = 0; i < vert.size(); i++)
@@ -302,8 +105,6 @@ public:
 	}
 };
 
-float step = 0;
-char* filename = NULL;
 
 // test an implicit function
 void testImplicitSphere(){
@@ -350,7 +151,7 @@ void testSimpleSphere() {
 }
 
 // test an sweep of an implicit function
-void testSweep(){
+void testSweep() {
 	std::vector<Vec3f> vert;
 	std::vector<int> face;
 	int radius = 1.0f;
@@ -368,7 +169,7 @@ void testSweep(){
 }
 
 // sweef of a mesh
-void testSweepMesh(){
+void testSweepMesh(const char *filename, float step) {
 	std::vector<Vec3f> vert;
 	std::vector<int> face;
 
@@ -387,7 +188,7 @@ void testSweepMesh(){
 }
 
 // CSM on a mesh
-void testCSM(){
+void testCSM(const char *filename, float step, bool dual) {
 	Timer clock;
 	clock.start();
 
@@ -398,7 +199,7 @@ void testCSM(){
 
 	Log::debug << "Loading time: " << clock.elapsed() << "ms";
 
-	center(vert);
+	//center(vert);
 
 	clock.restart();
 
@@ -407,6 +208,21 @@ void testCSM(){
 
 	Log::debug << "Creation time: " << clock.elapsed() << "ms";
 
+
+	clock.restart();
+	//if(dual) {
+		volume1.toMeshDual(vert, face);
+		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+		savePlyAsciiQuadMesh("dual.ply", vert, face);
+
+	//} else {
+		volume1.toMesh(vert, face);
+		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+		savePlyAsciiMesh("primal.ply", vert, face);
+
+	//}
+
+/*
 	rotate(vert);
 	mi::Volume volume2;
 	volume2.fromMesh(vert, face, step);
@@ -421,13 +237,15 @@ void testCSM(){
 	Log::debug << "Operation  time: " << clock.elapsed() << "ms";
 
 	clock.restart();
-	volume3.toMeshDual(vert, face);
-	Log::debug << "Meshing time: " << clock.elapsed() << "ms";
-
-	clock.restart();
-	savePlyAsciiQuadMesh("result.ply", vert, face);
-	//savePlyAsciiMesh("result.ply", vert, face);
-	Log::debug << "Saving time: " << clock.elapsed() << "ms";
+	if(dual) {
+		volume3.toMeshDual(vert, face);
+		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+		savePlyAsciiQuadMesh("dual.ply", vert, face);
+	} else {
+		volume3.toMesh(vert, face);
+		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+		savePlyAsciiMesh("primal.ply", vert, face);
+	} */
 }
 
 #include "mc_table.h"
@@ -447,9 +265,9 @@ void testMc(){
 
 int main(int argc, char *argv[])
 {
-	testImplicitSphere();
+	//testImplicitSphere();
 	//testSimpleSphere();
-	return 0;
+	//return 0;
 	//mi::McTable::test2();
 	//testMc();
 	//testImplicitSphere();
@@ -461,10 +279,16 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	step = QString(argv[1]).toFloat();
-	filename = argv[2];
+	float step = static_cast<float>(std::atof(argv[1]));
+	const char *filename = argv[2];
+	bool dual = false;
+	try {
+		testCSM(filename, step, dual);
+	} catch(const std::string &error) {
+		std::cerr << error << std::endl;
+		return -1;
+	}
 
-	testCSM();
 	//testSweepMesh();
 	return 0;
 
