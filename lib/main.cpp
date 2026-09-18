@@ -210,17 +210,31 @@ void testCSM(const char *filename, float step, bool dual) {
 
 
 	clock.restart();
-	//if(dual) {
-		volume1.toMeshDual(vert, face);
-		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
-		savePlyAsciiQuadMesh("dual.ply", vert, face);
 
-	//} else {
-		volume1.toMesh(vert, face);
-		Log::debug << "Meshing time: " << clock.elapsed() << "ms";
-		savePlyAsciiMesh("primal.ply", vert, face);
+	volume1.toMeshDual(vert, face);
+	Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+	savePlyAsciiQuadMesh("dual.ply", vert, face);
 
-	//}
+	volume1.toMesh(vert, face);
+	Log::debug << "Meshing time: " << clock.elapsed() << "ms";
+	savePlyAsciiMesh("primal.ply", vert, face);
+
+
+	//extract box.
+	Vec3i c = volume1.box.Center();
+	Box3i box;
+	box.min = c - Vec3i(32, 32, 32);
+	box.max = c + Vec3i(32, 32, 32);
+	box.Intersect(volume1.box);
+
+	mi::Volume region = volume1.subVolume(box);
+
+	
+	volume1.mergeSubVolume(region);
+
+	volume1.toMesh(vert, face);
+	savePlyAsciiMesh("filtered.ply", vert, face);
+
 
 /*
 	rotate(vert);
@@ -260,6 +274,7 @@ void testMc(){
 	for (int i=0; i<(int)vert.size(); i++) face[i]=i;
 
 	savePlyBinMesh("testMC.ply", vert, face);
+
 }
 
 

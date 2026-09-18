@@ -69,7 +69,9 @@ template <class Vec3> struct Box3 {
 	inline auto Diag() const { 
 		return std::sqrt(DimX()*DimX() + DimY()*DimY() + DimZ()*DimZ());
 	}
-	Vec3 Center() const { return (min + max)*0.5; }
+	Vec3 Center() const {
+		return (min + max)/2;
+	}
 };
 
 using Box3i = Box3<Pos3i>;

@@ -50,6 +50,15 @@ public:
 	void unification(const Volume &a, const Volume &b); //damn you, reserved 'union' keyword!
 	void intersection(const Volume &a, const Volume &b);
 	void subtraction(const Volume &a, const Volume &b);
+	// Extract a sub-volume containing only the intersection lines that cross the
+	// provided integer bounding box (in voxel/grid coordinates). The returned
+	// Volume has the same `step` as the source and its `box` equals `_box`.
+	// Only intersections whose global coordinates lie inside `_box` are copied.
+	Volume subVolume(Box3i _box) const;
+	// Merge a previously extracted sub-volume back into this volume. The
+	// `sub` must have the same `step` and a `box` fully contained in `this->box`.
+	// Lines in the sub region are replaced and consistency is enforced.
+	void mergeSubVolume(const Volume &sub);
 	void sweep(const Volume &v, Vec3f start, Vec3f end, int subsample); // produces a sweep of the volume v (which can be subsampled)   [O(N*K): todo: reduce to O(N)]
 	void fastSweep(const Volume &v, Vec3f start, Vec3f end, int subsample); // produces a sweep of the volume v (which can be subsampled)   [O(N*K): todo: reduce to O(N)]
 	void intersectPlane(const Vec3f &n, const Vec3f &pos); // intersects with specified half-space
@@ -78,6 +87,12 @@ public:
 	/* sanity checks */
 	bool checkIntersectionParity() const;
 	bool checkConsistency() const;
+
+	/* direct plane access for external editing (getters/setters) */
+	std::vector<int> getPlaneIndices(int plane) const;
+	void setPlaneIndices(int plane, const std::vector<int> &indices);
+	std::vector<Intersection> getPlaneIntersections(int plane) const;
+	void setPlaneIntersections(int plane, const std::vector<Intersection> &intersections);
 
 private:    
 

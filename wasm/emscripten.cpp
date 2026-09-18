@@ -91,6 +91,15 @@ MeshData exportToMesh(mi::Volume& vol) {
 }
 
 EMSCRIPTEN_BINDINGS(marching_lib) {
+    register_vector<int>("VectorInt");
+    register_vector<mi::Intersection>("VectorIntersection");
+
+    value_object<mi::Intersection>("Intersection")
+    .field("p", &mi::Intersection::p)
+#if STORE_NORMALS
+    .field("n", &mi::Intersection::n)
+#endif
+    ;
     value_object<MeshData>("MeshData")
         .field("vertices", &MeshData::vertices)
         .field("indices", &MeshData::indices);
@@ -121,5 +130,11 @@ EMSCRIPTEN_BINDINGS(marching_lib) {
         .function("intersection", &mi::Volume::intersection)
         .function("subtraction", &mi::Volume::subtraction)
         .function("translate", select_overload<void(Vec3f)>(&mi::Volume::translate))
+        .function("subVolume", &mi::Volume::subVolume)
+        .function("mergeSubVolume", &mi::Volume::mergeSubVolume)
+        .function("getPlaneIndices", &mi::Volume::getPlaneIndices)
+        .function("setPlaneIndices", &mi::Volume::setPlaneIndices)
+        .function("getPlaneIntersections", &mi::Volume::getPlaneIntersections)
+        .function("setPlaneIntersections", &mi::Volume::setPlaneIntersections)
         .function("toMesh", &exportToMesh);
 }
