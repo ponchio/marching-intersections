@@ -6,6 +6,19 @@ import createModule from '../dist/marching_lib_wasm.js';
 let Module, scene, camera, renderer, controls;
 let activeMesh = null;
 let volumeInstance = null;
+// Raycasting / carving state
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+let isPointerDown = false;
+let currentPickPoint = new THREE.Vector3();
+let lastCarvePoint = new THREE.Vector3();
+let carvingActive = false;
+const CARVE_THRESHOLD_FACTOR = 0.5; // require movement >= 50% radius to trigger next carve
+const CARVE_CHECK_INTERVAL_MS = 100; // loop check interval
+// Tool & control state
+let currentTool = null; // 'dig' when carving tool is active
+let controlsWasEnabledBeforeCarve = true;
+let controlsDisabledByCarve = false;
 
 async function init() {
   // 1. Initialize Emscripten Wasm Engine
@@ -38,6 +51,9 @@ async function init() {
 
   // 4. Attach Toolbar Event Handlers
   setupUI();
+
+  // 5. Setup carving mouse handlers
+  setupCarvingHandlers();
 
   // Resize handler
   window.addEventListener('resize', onWindowResize);
@@ -82,10 +98,156 @@ function setupUI() {
     stepInputEl = input;
   }
 
-  // Sculpting Filter Stubs
-  document.getElementById('btn-filter-grow').addEventListener('click', () => applyFilter('grow'));
-  document.getElementById('btn-filter-dig').addEventListener('click', () => applyFilter('dig'));
-  document.getElementById('btn-filter-flatten').addEventListener('click', () => applyFilter('flatten'));
+  // Sculpting Filter Buttons + dig-tool toggle
+  const growBtn = document.getElementById('btn-filter-grow');
+  const digBtn = document.getElementById('btn-filter-dig');
+  const flattenBtn = document.getElementById('btn-filter-flatten');
+
+  growBtn.addEventListener('click', () => {
+    currentTool = null;
+    digBtn.classList.remove('btn-primary');
+    applyFilter('grow');
+  });
+
+  digBtn.addEventListener('click', () => {
+    if (currentTool === 'dig') {
+      // deactivate tool
+      currentTool = null;
+      digBtn.classList.remove('btn-primary');
+      // restore controls if we left them disabled
+      if (controlsDisabledByCarve && controls) {
+        controls.enabled = controlsWasEnabledBeforeCarve;
+        controlsDisabledByCarve = false;
+      }
+    } else {
+      // activate dig tool
+      currentTool = 'dig';
+      digBtn.classList.add('btn-primary');
+      growBtn.classList.remove('btn-primary');
+      flattenBtn.classList.remove('btn-primary');
+    }
+  });
+
+  flattenBtn.addEventListener('click', () => {
+    currentTool = null;
+    digBtn.classList.remove('btn-primary');
+    applyFilter('flatten');
+  });
+}
+
+// Setup pointer event handlers on the renderer canvas to perform sphere carving
+function setupCarvingHandlers() {
+  if (!renderer) return;
+  const canvas = renderer.domElement;
+  canvas.style.touchAction = 'none';
+
+  function updateMouseNDC(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  function pickPoint() {
+    if (!activeMesh) return null;
+    raycaster.setFromCamera(mouseNDC, camera);
+    const intersects = raycaster.intersectObject(activeMesh, true);
+
+    if (intersects.length > 0) {
+      console.log(intersects[0].point);
+      return intersects[0].point.clone();
+    }
+
+    return null;
+  }
+
+  function computeRadiusWorld() {
+    if (!activeMesh) return 0.1;
+    const bbox = new THREE.Box3().setFromObject(activeMesh);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    // Use diagonal fraction (2%) as requested
+    return size.length() * 0.02;
+  }
+
+  async function applyCarveAtPoint(pt) {
+    if (!volumeInstance || !Module || !activeMesh) return;
+    const radius = computeRadiusWorld();
+    if (typeof Module.carveSphere === 'function') {
+      try {
+        Module.carveSphere(volumeInstance, pt.x, pt.y, pt.z, radius);
+        updateMeshFromWasm();
+      } catch (err) {
+        console.error('Error calling carveSphere:', err);
+      }
+    }
+  }
+
+  function carveLoop() {
+    if (!carvingActive) return;
+    const radius = computeRadiusWorld();
+    const threshold = radius * CARVE_THRESHOLD_FACTOR;
+    const dist = currentPickPoint.distanceTo(lastCarvePoint);
+    if (dist >= threshold) {
+      lastCarvePoint.copy(currentPickPoint);
+      applyCarveAtPoint(currentPickPoint);
+    }
+    setTimeout(() => requestAnimationFrame(carveLoop), CARVE_CHECK_INTERVAL_MS);
+  }
+
+  // Intercept pointerdown in capture phase when dig tool active so OrbitControls doesn't start rotating
+  canvas.addEventListener('pointerdown', (e) => {
+    updateMouseNDC(e);
+    if (currentTool !== 'dig') return; // not in dig mode; let OrbitControls handle it
+
+    // We intend to carve: prevent OrbitControls from reacting
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!activeMesh) return;
+    isPointerDown = true;
+
+    // Raycast against mesh to determine if click was on the mesh
+    raycaster.setFromCamera(mouseNDC, camera);
+    const intersects = raycaster.intersectObject(activeMesh, true);
+    let p = null;
+    if (intersects.length > 0) {
+      p = intersects[0].point.clone();
+      // Disable OrbitControls for the duration of the carve interaction
+      if (controls) {
+        controlsWasEnabledBeforeCarve = controls.enabled;
+        controls.enabled = false;
+        controlsDisabledByCarve = true;
+      }
+    } else {
+      // fallback to horizontal plane at y=0 (do not disable controls)
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      p = new THREE.Vector3();
+      raycaster.ray.intersectPlane(plane, p);
+    }
+
+    if (!p) return;
+    currentPickPoint.copy(p);
+    lastCarvePoint.copy(p);
+    carvingActive = true;
+    applyCarveAtPoint(p);
+    requestAnimationFrame(carveLoop);
+  }, { capture: true });
+
+  canvas.addEventListener('pointermove', (e) => {
+    updateMouseNDC(e);
+    const p = pickPoint();
+    if (p) currentPickPoint.copy(p);
+  });
+
+  window.addEventListener('pointerup', () => {
+    isPointerDown = false;
+    carvingActive = false;
+    // restore OrbitControls if we disabled them during carving
+    if (controlsDisabledByCarve && controls) {
+      controls.enabled = controlsWasEnabledBeforeCarve;
+      controlsDisabledByCarve = false;
+    }
+  });
 }
 
 // Compute average triangle edge length from flat position array and index array
@@ -270,8 +432,19 @@ function applyFilter(filterType) {
       // TODO: Perform CSG Smooth Union or Sweep operation in Wasm
       break;
     case 'dig':
-      console.log('Stub: Applying Dig Filter...');
-      // TODO: Perform CSG Smooth Subtraction operation in Wasm
+      console.log('Applying Sphere Carve Filter...');
+      if (Module && typeof Module.carveSphere === 'function' && activeMesh) {
+        // carve at the mesh bounding-box center with a 2% radius
+        const bbox = new THREE.Box3().setFromObject(activeMesh);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        const radius = size.length() * 0.02;
+        Module.carveSphere(volumeInstance, center.x, center.y, center.z, radius);
+      } else {
+        console.warn('carveSphere not available on Module or no active mesh');
+      }
       break;
     case 'flatten':
       console.log('Stub: Applying Flatten Filter...');

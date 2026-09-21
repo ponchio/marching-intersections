@@ -1,6 +1,7 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 #include "intersections.h"
+#include "filter.h"
 
 using namespace emscripten;
 
@@ -90,6 +91,38 @@ MeshData exportToMesh(mi::Volume& vol) {
     return MeshData{ jsVerts, jsIndices };
 }
 
+// JS wrapper: carve a sphere centered at world coordinates (wx,wy,wz) with given world radius
+void carveSphereAt(mi::Volume &vol, float wx, float wy, float wz, float radiusWorld) {
+    // If radiusWorld <= 0, compute a default as 2% of volume bounding box (in world units)
+    if (radiusWorld <= 0.0f) {
+        Pos3i dims = Pos3i(vol.box.max[0] - vol.box.min[0], vol.box.max[1] - vol.box.min[1], vol.box.max[2] - vol.box.min[2]);
+        float minDimWorld = std::min(std::min((float)dims[0], (float)dims[1]), (float)dims[2]) * vol.step;
+        radiusWorld = minDimWorld * 0.02f; // 2% of smallest dimension
+        if (radiusWorld <= 0.0f) radiusWorld = vol.step * 2.0f;
+    }
+
+    // Convert world center to voxel coordinates (center voxel)
+    Pos3i centerVoxel((int)std::floor(wx / vol.step + 0.5f), (int)std::floor(wy / vol.step + 0.5f), (int)std::floor(wz / vol.step + 0.5f));
+
+    // Compute required integer box size so that CarveSphereFilter computes approximately the requested radius
+    int minDimVox = std::max(1, (int)std::ceil((2.0f * (radiusWorld + 2.0f * vol.step)) / vol.step));
+
+    Pos3i half(minDimVox / 2, minDimVox / 2, minDimVox / 2);
+    Pos3i bmin = centerVoxel - half;
+    Pos3i bmax = bmin + Pos3i(minDimVox, minDimVox, minDimVox);
+
+    // Clamp to volume box
+    if (bmin[0] < vol.box.min[0]) bmin[0] = vol.box.min[0];
+    if (bmin[1] < vol.box.min[1]) bmin[1] = vol.box.min[1];
+    if (bmin[2] < vol.box.min[2]) bmin[2] = vol.box.min[2];
+    if (bmax[0] > vol.box.max[0]) bmax[0] = vol.box.max[0];
+    if (bmax[1] > vol.box.max[1]) bmax[1] = vol.box.max[1];
+    if (bmax[2] > vol.box.max[2]) bmax[2] = vol.box.max[2];
+
+    Box3i box(bmin, bmax);
+    mi::applyCarveSphere(vol, box);
+}
+
 EMSCRIPTEN_BINDINGS(marching_lib) {
     register_vector<int>("VectorInt");
     register_vector<mi::Intersection>("VectorIntersection");
@@ -114,6 +147,8 @@ EMSCRIPTEN_BINDINGS(marching_lib) {
 
     class_<ImplicitSphere>("ImplicitSphere")
         .constructor<float>();
+
+    function("carveSphere", &carveSphereAt);
 
     
     class_<mi::Volume>("Volume")
