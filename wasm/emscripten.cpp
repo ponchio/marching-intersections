@@ -93,14 +93,6 @@ MeshData exportToMesh(mi::Volume& vol) {
 
 // JS wrapper: carve a sphere centered at world coordinates (wx,wy,wz) with given world radius
 void carveSphereAt(mi::Volume &vol, float wx, float wy, float wz, float radiusWorld) {
-    // If radiusWorld <= 0, compute a default as 2% of volume bounding box (in world units)
-    if (radiusWorld <= 0.0f) {
-        Pos3i dims = Pos3i(vol.box.max[0] - vol.box.min[0], vol.box.max[1] - vol.box.min[1], vol.box.max[2] - vol.box.min[2]);
-        float minDimWorld = std::min(std::min((float)dims[0], (float)dims[1]), (float)dims[2]) * vol.step;
-        radiusWorld = minDimWorld * 0.02f; // 2% of smallest dimension
-        if (radiusWorld <= 0.0f) radiusWorld = vol.step * 2.0f;
-    }
-
     // Convert world center to voxel coordinates (center voxel)
     Pos3i centerVoxel((int)std::floor(wx / vol.step + 0.5f), (int)std::floor(wy / vol.step + 0.5f), (int)std::floor(wz / vol.step + 0.5f));
 
@@ -148,7 +140,7 @@ EMSCRIPTEN_BINDINGS(marching_lib) {
     class_<ImplicitSphere>("ImplicitSphere")
         .constructor<float>();
 
-    function("carveSphere", &carveSphereAt);
+    function("carveSphereAt", &carveSphereAt);
 
     
     class_<mi::Volume>("Volume")
