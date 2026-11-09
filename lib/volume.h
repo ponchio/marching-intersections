@@ -1,5 +1,5 @@
-#ifndef INTERSECTIONS_H
-#define INTERSECTIONS_H
+#ifndef VOLUME_H
+#define VOLUME_H
 
 #include "log.h"
 #include "vec.h"
@@ -188,4 +188,4 @@ void Volume::fromImplicit(Implicit function, float _step ) {
 
 
 } //namespace mi
-#endif // INTERSECTIONS_H
+#endif // VOLUME_H

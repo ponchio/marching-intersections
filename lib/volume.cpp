@@ -1,6 +1,6 @@
 #include "log.h"
 
-#include "intersections.h"
+#include "volume.h"
 #include "mc_edge.h"
 #include "loom.h"
 #include "dual_loom.h"

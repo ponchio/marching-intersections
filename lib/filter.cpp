@@ -1,5 +1,5 @@
 #include "filter.h"
-#include "intersections.h"
+#include "volume.h"
 
 #include <algorithm>
 #include <cmath>

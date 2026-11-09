@@ -1,6 +1,6 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
-#include "intersections.h"
+#include "volume.h"
 #include "filter.h"
 
 using namespace emscripten;

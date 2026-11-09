@@ -1,7 +1,7 @@
 #ifndef FILTER_H
 #define FILTER_H
 
-#include "intersections.h"
+#include "volume.h"
 
 namespace mi {
 

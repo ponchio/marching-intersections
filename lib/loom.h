@@ -2,7 +2,7 @@
 #define LOOM_H
 
 #include <vector>
-#include "intersections.h"
+#include "volume.h"
 
 namespace mi {
 

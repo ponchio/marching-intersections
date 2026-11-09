@@ -3,83 +3,16 @@
 
 #include "log.h"
 #include "box.h"
+#include "intersection.h"
+#include "line.h"
+#include "output_line.h"
+
 #include <vector>
 
 namespace mi {
 
 class Loom;
 class DualLoom;
-
-
-class Intersection {
-public:
-	float p;
-#if STORE_NORMALS
-	Vec3f n;
-#endif
-	//add your attributes here.
-
-	Intersection() {}
-#if STORE_NORMALS
-	Intersection(float _p, Vec3f _n): p(_p),n(_n) {}
-#else
-	Intersection(float _p): p(_p) {}
-#endif
-
-	bool operator<(const Intersection &b) const { return p < b.p; }
-	bool operator>(const Intersection &b) const { return p > b.p; }
-	bool operator==(const Intersection &b) const { return p == b.p; }
-#if STORE_NORMALS
-	Intersection flip() const { return Intersection(p,-n); }
-	Intersection operator-(int i) const { return Intersection(p-i,n); }
-	Intersection operator/(int i) const { return Intersection(p/i,n); }
-#else
-	Intersection flip() const { return Intersection(p); }
-	Intersection operator-(int i) const { return Intersection(p-i); }
-	Intersection operator/(int i) const { return Intersection(p/i); }
-#endif
-};
-
-
-class Line {
-public:
-
-	Intersection *in;
-	int len; //how many intersections belong to this line.
-	Line(Intersection *_in = NULL, int _len = 0): in(_in), len(_len) {}
-
-	Intersection &at(int i) { return in[i]; }
-	const Intersection &at(int i) const { return in[i]; }
-	Intersection &operator[](int i) { return in[i]; }
-	const Intersection &operator[](int i) const { return in[i]; }
-
-	int size() const { return len; }
-	void resize(int i) { len = i; }
-
-	void insert(Intersection a);
-};
-
-/* Temporary structure to perform operations and save result in
-plane intersection array. */
-
-class OutputLine {
-public:
-	Intersection *start; //not the start of the line, it's the start of the plane!
-	int *final_position; //this points to the index array.
-
-	OutputLine(Intersection *_start, int *counter): start(_start), final_position(counter) {}
-
-	void push_back(const Intersection &i) { start[(*final_position)++] = i; }
-
-	//join intervals if end == start of the next.
-	int cleanUp(const Line &a);
-
-	int scaleAndCleanup(const Line &a, int scale, int add);
-	void scale(const Line &a, int scale, int add);
-	void unification(const Line &a, const Line &b); //damn you, reserved 'union' keyword!
-	void intersection(const Line &a, const Line &b);
-	void subtraction(const Line &a, const Line &b);
-};
 
 class Plane {
 public:
@@ -102,7 +35,7 @@ public:
 	int relIndex(int u, int v) const {
 		return u + v*width;
 	}
-	
+
 	Line at(int i) {
 		int offset = indices[i];
 		int len = indices[i + 1] - offset;
@@ -139,7 +72,6 @@ public:
 		return OutputLine(&*intersections.begin(), &indices[index+1]);
 	}
 
-
 	void translate(Vec3i d);
 	void accumulateLengths();
 	void allocate();
@@ -148,8 +80,6 @@ public:
 
 	bool isInside(Vec3i p) const;
 	Intersection *getClosest(Vec3i p);
-
-
 
 private:
 	int width;

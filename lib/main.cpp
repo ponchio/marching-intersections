@@ -7,7 +7,7 @@
 #include <chrono>
 #include "log.h"
 
-#include "intersections.h"
+#include "volume.h"
 #include "mesh_io.h"
 
 // Small cross-platform timer replacing QTime usage
@@ -308,5 +308,4 @@ int main(int argc, char *argv[])
 	return 0;
 
 }
-
 

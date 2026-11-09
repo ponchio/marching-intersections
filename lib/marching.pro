@@ -20,7 +20,9 @@ QMAKE_CXXFLAGS += -Wno-unused-local-typedefs
 SOURCES += \
     ../../../vcglib/wrap/system/qgetopt.cpp \
     main.cpp \
-    intersections.cpp \
+    volume.cpp \
+    line.cpp \
+    output_line.cpp \
     mc_edge.cpp \
     loom.cpp \
     dual_loom.cpp \
@@ -28,7 +30,10 @@ SOURCES += \
 
 HEADERS += \
     ../../../vcglib/wrap/system/qgetopt.h \
-    intersections.h \
+    intersection.h \
+    line.h \
+    output_line.h \
+    volume.h \
     mc_edge.h \
     loom.h \
     dual_loom.h \
