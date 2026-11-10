@@ -309,5 +309,5 @@ void Loom::weave(std::vector<int> &faces){
 	}
 	completeBottomGrid( faces );
 
-	Log::debug << "Total "<< faces.size()/3 <<" faces weaved";
+	Log::debug << "Total "<< faces.size()/3 <<" faces weaved\n";
 }

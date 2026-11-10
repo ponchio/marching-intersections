@@ -4,6 +4,9 @@
 #include <cstring>
 #include <string>
 #include <cerrno>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 // Small helper to build error messages
 static std::string err(const char *msg, const char *fname) {
@@ -13,49 +16,58 @@ static std::string err(const char *msg, const char *fname) {
 }
 
 void loadObj(const char *filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
-    char buffer[1024];
-    FILE *fp = fopen(filename, "r");
-    if(!fp)
+    std::ifstream input(filename);
+    if(!input)
         throw err("Could not open file", filename);
 
-    while(fgets(buffer, sizeof(buffer), fp) != NULL) {
-        int s = (int)strlen(buffer);
-        if(s == 0) continue;
-        while(s > 0 && (buffer[s-1] == '\n' || buffer[s-1] == '\r')) { buffer[s-1] = '\0'; --s; }
-        if(s == 0) continue;
-        if(buffer[0] == '#') continue;
-
-        if(buffer[0] == 'v') {
-            if(buffer[1] == ' ') {
-                Pos3f v;
-                int n = sscanf(buffer, "v %f %f %f", &(v[0]), &(v[1]), &(v[2]));
-                if(n != 3) throw err("Error parsing vertex line", buffer);
-                vert.push_back(v);
-            }
+    std::vector<Vec3f> vertices;
+    std::vector<int> faces;
+    std::string line;
+    while(std::getline(input, line)) {
+        std::istringstream row(line);
+        std::string tag;
+        if(!(row >> tag) || tag[0] == '#')
             continue;
-        }
-        if(buffer[0] == 'f') {
-            int f[4];
-            int res=sscanf(buffer, "f %d %d %d %d", &f[0], &f[1], &f[2], &f[3]);
-            if (res !=4 && res != 3) {
-                int dummy;
-                res=sscanf(buffer, "f %d//%d %d//%d %d//%d %d//%d", &f[0], &dummy, &f[1], &dummy,  &f[2] , &dummy ,  &f[3] , &dummy);
-                if(res != 8 && res != 6) {
-                    fclose(fp);
-                    throw err("Could not parse face", buffer);
-                }
-                res /=2;
+
+        if(tag == "v") {
+            Pos3f vertex;
+            if(!(row >> vertex[0] >> vertex[1] >> vertex[2]))
+                throw err("Error parsing vertex line", filename);
+            vertices.push_back(vertex);
+        } else if(tag == "f") {
+            std::vector<int> polygon;
+            std::string token;
+            while(row >> token) {
+                if(!token.empty() && token[0] == '#')
+                    break;
+                const size_t slash = token.find('/');
+                const std::string vertexIndex = token.substr(0, slash);
+                char *end = nullptr;
+                errno = 0;
+                const long rawIndex = std::strtol(vertexIndex.c_str(), &end, 10);
+                if(vertexIndex.empty() || end == vertexIndex.c_str() || *end != '\0' ||
+                   errno == ERANGE || rawIndex == 0)
+                    throw err("Could not parse face", filename);
+                const long resolved = rawIndex > 0
+                    ? rawIndex - 1
+                    : static_cast<long>(vertices.size()) + rawIndex;
+                if(resolved < 0 || resolved >= static_cast<long>(vertices.size()))
+                    throw err("Face index outside vertex array", filename);
+                polygon.push_back(static_cast<int>(resolved));
             }
-            if (res == 3) {
-                for(int i = 0; i < 3; i++) face.push_back(f[i] -1);
-            }
-            if (res == 4) {
-                for(int i = 0; i < 3; i++) face.push_back(f[i] -1);
-                for(int i = 2; i < 5; i++) face.push_back(f[i%4] -1);
+            if(polygon.size() < 3)
+                throw err("Face has fewer than three vertices", filename);
+            for(size_t i = 1; i + 1 < polygon.size(); ++i) {
+                faces.push_back(polygon[0]);
+                faces.push_back(polygon[i]);
+                faces.push_back(polygon[i + 1]);
             }
         }
     }
-    fclose(fp);
+    if(!input.eof())
+        throw err("Error reading file", filename);
+    vert.swap(vertices);
+    face.swap(faces);
 }
 
 void saveObj(const char *filename, std::vector<Vec3f> &vert, std::vector<Vec3f> &norm, std::vector<int> &face) {
@@ -130,6 +142,31 @@ void savePlyBinMesh(const char *filename, std::vector<Vec3f> &vert, std::vector<
     fclose(fp);
 }
 
+void savePlyBinQuadMesh(const char *filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
+	FILE *fp = fopen(filename, "wb");
+	if(!fp) throw err("Could not open file for writing", filename);
+
+	fprintf(fp, "ply\nformat binary_little_endian 1.0\n");
+	fprintf(fp, "element vertex %zu\n", vert.size());
+	fprintf(fp, "property float x\nproperty float y\nproperty float z\n");
+	fprintf(fp, "element face %zu\n", face.size()/2);
+	fprintf(fp, "property list uchar int vertex_indices\n");
+	fprintf(fp, "end_header\n");
+
+	fwrite(&*vert.begin(), sizeof(Pos3f), vert.size(), fp);
+
+	unsigned char n = 3;
+	for(size_t i = 0; i < face.size(); i += 4) {
+		fwrite(&n, 1, 1, fp);
+		fwrite(&(face[i]), sizeof(int), 3, fp);
+		int f[3] = { face[i+2], face[i+3], face[i] };
+
+		fwrite(&n, 1, 1, fp);
+		fwrite(&(f), sizeof(int), 3, fp);
+	}
+	fclose(fp);
+}
+
 void savePlyAsciiMesh(const char *filename, std::vector<Vec3f> &vert, std::vector<int> &face) {
     FILE *fp = fopen(filename, "w");
     if(!fp) throw err("Could not open file for writing", filename);
@@ -166,9 +203,9 @@ void savePlyAsciiQuadMesh(const char *filename, std::vector<Vec3f> &vert, std::v
         Pos3f &v = vert[i];
         fprintf(fp, "%f %f %f\n", v[0], v[1], v[2]);
     }
-    for(size_t i = 0; i < face.size(); i += 4) {
-        fprintf(fp, "3 %d %d %d\n", face[i], face[i+1], face[i+2]);
-        fprintf(fp, "3 %d %d %d\n", face[i+2], face[i+3], face[i]);
-    }
+	for(size_t i = 0; i < face.size(); i += 4) {
+		fprintf(fp, "3 %d %d %d\n", face[i], face[i+1], face[i+2]);
+		fprintf(fp, "3 %d %d %d\n", face[i+2], face[i+3], face[i]);
+	}
     fclose(fp);
 }

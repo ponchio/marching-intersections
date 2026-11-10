@@ -80,7 +80,7 @@ public:
 	void toMeshDualOld(std::vector<Pos3f> &verts, std::vector<int> &tri_faces);
 
 	/* maintenance and stats */
-	int cleanUp(); // removes redundant (double) intersections. Call for efficiecy, but automatically called before extracting mesh anyway
+	int cleanUp(); // removes redundant intersections; fromMesh calls this, other operations may defer it until mesh extraction
 	void subsampled(const Volume &a, int step, Vec3i offset);
 	int totalIntersections() const;
 

@@ -484,10 +484,10 @@ void DualLoom::weave(std::vector<Pos3f> &verts, std::vector<int> &faces){
 	}
 
 
-	Log::debug << "Total "<< faces.size()/4 <<" quads and "<<verts.size()<<"verts weaved (DUAL)";
+	Log::debug << "Total "<< faces.size()/4 <<" quads and "<<verts.size()<<"verts weaved (DUAL)\n";
 }
 
 void DualLoom::error(int code){
-	Log::debug << "MERDA VERA "<< code;
+	Log::debug << "We got a serious problem here. "<< code;
 	exit(0);
 }

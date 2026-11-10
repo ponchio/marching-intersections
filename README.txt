@@ -23,7 +23,7 @@ Build (native)
    cmake .. -DCMAKE_BUILD_TYPE=Release
    make -j$(nproc)
 
-2. Example binaries (tests) will be available in the build directory (e.g. `mi_test`).
+2. The converter executable will be available under `build/lib/mi_convert`.
 
 Build (WASM)
 ------------

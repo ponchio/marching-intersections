@@ -54,7 +54,7 @@ void McEdge::triangulate(std::vector<int> &faces) {
 
 	int vertex_mask = edges_to_cases[edge_mask];
 	if(vertex_mask < 0) {
-		Log::debug << "AAAAAAAAARRRRRGGGGGGGHHHHHHHH MERDA VERA";
+		Log::debug << "We got a very serious problem here.\n";
 		//Log::debug() << "Unknown Edge mask: " <<  (void *)edge_mask;
 		//exit(-1);
 	}

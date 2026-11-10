@@ -35,7 +35,7 @@ void move(Pos3f &a) {
 
 void Volume::resize(Box3i _box) {
 	if(pow(_box.Volume(), 0.6666) > 100000000) {
-		Log::debug << "Danger, Will Robinson! Playing with big numbers are you?";
+		Log::debug << "Danger, Will Robinson! Playing with big numbers are you?\n";
 		exit(-1);
 	}
 	box = _box;
@@ -111,6 +111,7 @@ void Volume::fromMesh(const std::vector<Pos3f> &overts, const std::vector<int> &
 	checkIntersectionParity();
 	enforceConsistency();
 	isClean = false;
+	cleanUp();
 }
 
 class Edge {
@@ -409,8 +410,8 @@ void Volume::toMeshOld(std::vector<Pos3f> &verts, std::vector<int> &faces) {
 
 void Volume::unification(const Volume &a, const Volume &b) {
 	if(a.step != b.step) { 
-		throw std::string("Volume for unification must have the same step");		
-		Log::debug << "Non the same steps: " << a.step << b.step;
+		throw std::string("Volume for unification must have the same step");
+		Log::debug << "Non the same steps: " << a.step << b.step << "\n";
 	}
 	step = a.step;
 	box = a.box;
@@ -468,8 +469,8 @@ void Volume::intersection(const Volume &a, const Volume &b) {
 
 void Volume::subtraction(const Volume &a, const Volume &b) {
 	if(a.step != b.step) {
-		throw std::string("Volume for unification must have the same step");		
-		Log::debug << "Non the same steps: " << a.step << b.step;
+		throw std::string("Volume for unification must have the same step");
+		Log::debug << "Non the same steps: " << a.step << b.step << "\n";
 	}
 	step = a.step;
 
@@ -676,7 +677,7 @@ void Volume::fastSweep(const Volume &v, Vec3f start, Vec3f end, int subsample ) 
 		next /= 2;
 		if ( rest.SquaredNorm() == 0 ) break;
 		step.push_back( rest );
-		Log::debug << rest[0]<<rest[1]<<rest[2];
+		Log::debug << rest[0] << rest[1] << rest[2] << "\n";
 	}
 
 	*this = v;
@@ -871,7 +872,7 @@ bool Volume::checkIntersectionParity() const {
 
 bool Volume::checkConsistency(Vec3i p) const {
 	/*if (enforceConsistency(p) != -1 ) {
-		Log::debug << "MERDA VERA davvero!";
+		Log::debug << "Should never happen this.";
 	}*/
 
 	bool a = planes[0].isInside(toLocal(p, 0));
@@ -880,7 +881,7 @@ bool Volume::checkConsistency(Vec3i p) const {
 
 
 	if(a != b || a != c) {
-		//Log::debug() << "MERDA VERA!";
+		//Log::debug() << "OOOPSPPS!";
 		//Log::debug() << "p: " << p[0] << p[1] << p[2];
 		return false;
 	}
@@ -1114,5 +1115,4 @@ void Volume::optimizeQuadDiagonals(std::vector<int> &q, int nv){
 			val[q[i+3]]--;
 		}
 	}
-	Log::debug << "Rotated" << count << "quads";
 }
