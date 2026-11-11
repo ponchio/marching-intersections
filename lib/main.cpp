@@ -308,7 +308,7 @@ bool objToObj(const std::string &inputPath, const std::string &outputPath,
 	return writeObj(outputPath, vertices, faces, dual);
 }
 
-bool readVolume(mi::ColumeIo &io, FileFormat format, const std::string &path) {
+bool readVolume(mi::VolumeIo &io, FileFormat format, const std::string &path) {
 	switch(format) {
 	case FileFormat::Text: return io.loadText(path);
 	case FileFormat::Binary: return io.loadBin(path);
@@ -317,7 +317,7 @@ bool readVolume(mi::ColumeIo &io, FileFormat format, const std::string &path) {
 	}
 }
 
-bool writeVolume(const mi::ColumeIo &io, FileFormat format, const std::string &path) {
+bool writeVolume(const mi::VolumeIo &io, FileFormat format, const std::string &path) {
 	switch(format) {
 	case FileFormat::Text: return io.saveText(path);
 	case FileFormat::Binary: return io.saveBin(path);
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
 		}*/
 
 		mi::Volume volume;
-		mi::ColumeIo volumeIo(volume);
+		mi::VolumeIo volumeIo(volume);
 		if(inputFormat == FileFormat::Obj) {
 			std::vector<Vec3f> vertices;
 			std::vector<int> faces;

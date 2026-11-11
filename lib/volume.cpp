@@ -9,6 +9,7 @@
 #include <sstream>
 #include <cassert>
 #include <cstring>
+#include <utility>
 
 #define EPSILON 0.000001
 
@@ -1064,6 +1065,23 @@ void Volume::setPlaneIntersections(int plane, const std::vector<Intersection> &i
 		throw std::string("Plane intersections size mismatch");
 	}
 	p.intersections = intersections;
+}
+
+void Volume::setPlaneData(int plane, std::vector<int> &&indices,
+						  std::vector<Intersection> &&intersections) {
+	if(plane < 0 || plane > 2)
+		throw std::string("Plane index out of range");
+	Plane &p = planes[plane];
+	const size_t expected = static_cast<size_t>(p.box.DimX()) * p.box.DimY() + 1;
+	if(indices.size() != expected || indices.empty() || indices.front() != 0 ||
+	   indices.back() < 0 || static_cast<size_t>(indices.back()) != intersections.size())
+		throw std::string("Plane data size mismatch");
+	for(size_t i = 1; i < indices.size(); ++i)
+		if(indices[i] < indices[i - 1])
+			throw std::string("Plane indices must be monotonically increasing");
+	p.indices = std::move(indices);
+	p.intersections = std::move(intersections);
+	isClean = false;
 }
 
 int Volume::totalIntersections() const{

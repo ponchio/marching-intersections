@@ -93,6 +93,7 @@ public:
 	void setPlaneIndices(int plane, const std::vector<int> &indices);
 	std::vector<Intersection> getPlaneIntersections(int plane) const;
 	void setPlaneIntersections(int plane, const std::vector<Intersection> &intersections);
+	void setPlaneData(int plane, std::vector<int> &&indices, std::vector<Intersection> &&intersections);
 
 private:    
 
