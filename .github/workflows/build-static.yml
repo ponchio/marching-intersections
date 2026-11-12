@@ -30,7 +30,7 @@ jobs:
             artifact: macos-arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (Linux, fully static)
         if: runner.os == 'Linux'
@@ -62,9 +62,26 @@ jobs:
         run: cmake --install build --config Release --prefix "$GITHUB_WORKSPACE/package"
         shell: bash
 
+      - name: Verify installed package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find package -type f -print
+          test -d package/bin
+          test -d package/lib
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            test -f package/bin/mi_convert.exe
+            test -f package/bin/mi_process.exe
+            compgen -G 'package/lib/marching_lib.lib' >/dev/null
+          else
+            test -x package/bin/mi_convert
+            test -x package/bin/mi_process
+            compgen -G 'package/lib/libmarching_lib.*' >/dev/null
+          fi
+
       - name: Upload compiled binaries and library
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: marching-intersections-${{ matrix.artifact }}
           path: package/
