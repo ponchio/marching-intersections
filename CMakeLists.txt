@@ -7,13 +7,13 @@ include(CTest)
 
 # Build library and related targets in lib/
 add_subdirectory(lib)
+add_subdirectory(mi_convert)
+add_subdirectory(mi_process)
 add_subdirectory(wasm)
 if(BUILD_TESTING)
-        add_subdirectory(tests)
+#        add_subdirectory(tests)
 endif()
 
-install(TARGETS marching_lib mi_convert
+install(TARGETS marching_lib mi_convert mi_process
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin)
-
-

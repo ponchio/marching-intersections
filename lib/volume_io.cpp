@@ -1,4 +1,5 @@
 #include "volume_io.h"
+#include "json_parser.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,9 @@
 namespace mi {
 
 namespace {
+
+using JsonParser = json::Parser;
+using JsonValue = json::Value;
 
 struct ParsedVolume {
 	float step = 0.0f;
@@ -134,157 +138,6 @@ bool installParsedVolume(const ParsedVolume &parsed, Volume &destination) {
 	destination = loaded;
 	return true;
 }
-
-struct JsonValue {
-	enum class Type { Null, Number, String, Array, Object, Boolean } type = Type::Null;
-	double number = 0.0;
-	std::string string;
-	std::vector<JsonValue> array;
-	std::map<std::string, JsonValue> object;
-};
-
-class JsonParser {
-public:
-	explicit JsonParser(const std::string &input): input(input) {}
-
-	bool parse(JsonValue &value) {
-		if(!parseValue(value)) return false;
-	skipWhitespace();
-		return position == input.size();
-	}
-
-private:
-	const std::string &input;
-	size_t position = 0;
-
-	void skipWhitespace() {
-		while(position < input.size() && (input[position] == ' ' || input[position] == '\t' ||
-			input[position] == '\r' || input[position] == '\n'))
-			++position;
-	}
-
-	bool parseString(std::string &result) {
-		if(position >= input.size() || input[position++] != '"') return false;
-		while(position < input.size()) {
-			char c = input[position++];
-			if(c == '"') return true;
-			if(static_cast<unsigned char>(c) < 0x20) return false;
-			if(c != '\\') {
-				result.push_back(c);
-				continue;
-			}
-			if(position >= input.size()) return false;
-			switch(input[position++]) {
-			case '"': result.push_back('"'); break;
-			case '\\': result.push_back('\\'); break;
-			case '/': result.push_back('/'); break;
-			case 'b': result.push_back('\b'); break;
-			case 'f': result.push_back('\f'); break;
-			case 'n': result.push_back('\n'); break;
-			case 'r': result.push_back('\r'); break;
-			case 't': result.push_back('\t'); break;
-			case 'u': {
-				if(input.size() - position < 4) return false;
-				unsigned int code = 0;
-				for(int i = 0; i < 4; ++i) {
-					const char h = input[position++];
-					code <<= 4;
-					if(h >= '0' && h <= '9') code |= h - '0';
-					else if(h >= 'a' && h <= 'f') code |= h - 'a' + 10;
-					else if(h >= 'A' && h <= 'F') code |= h - 'A' + 10;
-					else return false;
-				}
-				result.push_back(code < 0x80 ? static_cast<char>(code) : '?');
-				break;
-			}
-			default: return false;
-			}
-		}
-		return false;
-	}
-
-	bool parseNumber(JsonValue &value) {
-		const size_t start = position;
-		if(position < input.size() && input[position] == '-') ++position;
-		if(position >= input.size()) return false;
-		if(input[position] == '0') ++position;
-		else {
-			if(input[position] < '1' || input[position] > '9') return false;
-			while(position < input.size() && input[position] >= '0' && input[position] <= '9') ++position;
-		}
-		if(position < input.size() && input[position] == '.') {
-			++position;
-			const size_t fraction = position;
-			while(position < input.size() && input[position] >= '0' && input[position] <= '9') ++position;
-			if(position == fraction) return false;
-		}
-		if(position < input.size() && (input[position] == 'e' || input[position] == 'E')) {
-			++position;
-			if(position < input.size() && (input[position] == '+' || input[position] == '-')) ++position;
-			const size_t exponent = position;
-			while(position < input.size() && input[position] >= '0' && input[position] <= '9') ++position;
-			if(position == exponent) return false;
-		}
-		value.number = std::strtod(input.substr(start, position - start).c_str(), nullptr);
-		value.type = JsonValue::Type::Number;
-		return std::isfinite(value.number);
-	}
-
-	bool parseValue(JsonValue &value) {
-		skipWhitespace();
-		if(position >= input.size()) return false;
-		const char c = input[position];
-		if(c == '"') {
-			value.type = JsonValue::Type::String;
-			return parseString(value.string);
-		}
-		if(c == '{') {
-			++position;
-			value.type = JsonValue::Type::Object;
-			skipWhitespace();
-			if(position < input.size() && input[position] == '}') { ++position; return true; }
-			while(true) {
-				skipWhitespace();
-				std::string key;
-				if(!parseString(key)) return false;
-				skipWhitespace();
-				if(position >= input.size() || input[position++] != ':') return false;
-				JsonValue member;
-				if(!parseValue(member) || !value.object.emplace(key, std::move(member)).second) return false;
-				skipWhitespace();
-				if(position >= input.size()) return false;
-				if(input[position] == '}') { ++position; return true; }
-				if(input[position++] != ',') return false;
-			}
-		}
-		if(c == '[') {
-			++position;
-			value.type = JsonValue::Type::Array;
-			skipWhitespace();
-			if(position < input.size() && input[position] == ']') { ++position; return true; }
-			while(true) {
-				JsonValue member;
-				if(!parseValue(member)) return false;
-				value.array.push_back(std::move(member));
-				skipWhitespace();
-				if(position >= input.size()) return false;
-				if(input[position] == ']') { ++position; return true; }
-				if(input[position++] != ',') return false;
-			}
-		}
-		if(c == '-' || (c >= '0' && c <= '9')) return parseNumber(value);
-		if(input.compare(position, 4, "true") == 0) {
-			position += 4; value.type = JsonValue::Type::Boolean; return true;
-		}
-		if(input.compare(position, 5, "false") == 0) {
-			position += 5; value.type = JsonValue::Type::Boolean; return true;
-		}
-		if(input.compare(position, 4, "null") == 0) {
-			position += 4; value.type = JsonValue::Type::Null; return true;
-		}
-		return false;
-	}
-};
 
 const JsonValue *member(const JsonValue &value, const char *key) {
 	if(value.type != JsonValue::Type::Object) return nullptr;

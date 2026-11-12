@@ -23,7 +23,15 @@ Build (native)
    cmake .. -DCMAKE_BUILD_TYPE=Release
    make -j$(nproc)
 
-2. The converter executable will be available under `build/lib/mi_convert`.
+2. The converter executable will be available under `build/mi_convert/mi_convert`.
+3. Run boolean-operation JSON from the directory containing its referenced OBJ files:
+
+   `build/mi_process/mi_process -s 0.05 -d models/groviera/operations.json result.obj`
+
+   `-s` sets the voxel spacing, `-d` exports a dual mesh (the default), and `-m`
+   exports a primal mesh. Operation source OBJ paths are relative to the JSON file.
+   The `obj_snapshot` names on targets link later operations to earlier results;
+   those snapshot OBJ files are not loaded.
 
 Build (WASM)
 ------------
@@ -60,5 +68,3 @@ Run the demo (Vite)
    npm run dev
 
 4. Open the URL printed by Vite (usually `http://localhost:5173/demo`) and load the demo.
-
-
