@@ -42,6 +42,8 @@ Build (WASM)
 
    The script invokes CMake (via Emscripten) and copies `marching_lib_wasm.js` and
    `marching_lib_wasm.wasm` into `dist/` so the demo can import them.
+   WASM is disabled in ordinary native CMake builds; the script opts in and builds
+   only the WASM target with the Emscripten toolchain.
 
 Run the demo (Vite)
 -------------------

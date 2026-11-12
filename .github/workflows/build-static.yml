@@ -1,0 +1,104 @@
+name: Build static binaries
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux x86_64
+            artifact: linux-x86_64
+          - os: windows-latest
+            label: Windows x86_64
+            artifact: windows-x86_64
+          - os: macos-15-intel
+            label: macOS x86_64
+            artifact: macos-x86_64
+          - os: macos-latest
+            label: macOS arm64
+            artifact: macos-arm64
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure (Linux, fully static)
+        if: runner.os == 'Linux'
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_WASM=OFF
+          -DCMAKE_EXE_LINKER_FLAGS=-static
+
+      - name: Configure (Windows, static MSVC runtime)
+        if: runner.os == 'Windows'
+        run: >-
+          cmake -S . -B build -A x64
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_WASM=OFF
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_WASM=OFF
+
+      - name: Build executables and library
+        run: cmake --build build --config Release --parallel --target mi_convert mi_process marching_lib
+
+      - name: Install package
+        run: cmake --install build --config Release --prefix "$GITHUB_WORKSPACE/package"
+        shell: bash
+
+      - name: Verify installed package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find package -type f -print
+          test -d package/bin
+          test -d package/lib
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            test -f package/bin/mi_convert.exe
+            test -f package/bin/mi_process.exe
+            compgen -G 'package/lib/marching_lib.lib' >/dev/null
+          else
+            test -x package/bin/mi_convert
+            test -x package/bin/mi_process
+            compgen -G 'package/lib/libmarching_lib.*' >/dev/null
+          fi
+
+      - name: Upload compiled binaries and library
+        id: upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: marching-intersections-${{ matrix.artifact }}
+          path: package/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Add download link to job summary
+        shell: bash
+        run: |
+          {
+            echo "## ${{ matrix.label }} build"
+            echo
+            echo "[Download the executables, static library, and headers](${{ steps.upload.outputs.artifact-url }})"
+            echo
+            echo "Package contents: bin/mi_convert, bin/mi_process, lib/, and include/marching-intersections/."
+            if [[ "${{ runner.os }}" == "macOS" ]]; then
+              echo
+              echo "Note: macOS does not support fully static executables; the binaries use macOS system libraries, while the project library is provided as a static archive."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

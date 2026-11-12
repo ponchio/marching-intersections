@@ -2,6 +2,7 @@
 #define LIB_VEC_H
 
 #include <cmath>
+#include <cstddef>
 
 template<typename T>
 struct Vec2 {
