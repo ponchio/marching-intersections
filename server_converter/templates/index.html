@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Upload file</title>
+    <style>
+      :root{
+        --bg-color: #f4f6fb;
+        --card: #ffffff;
+        --accent: #2b6df6;
+        --muted: #666;
+      }
+      html,body{height:100%;}
+      body {
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        margin: 0; background: var(--bg-color);
+        min-height: 100vh;
+        display: flex; flex-direction: column; align-items: center; padding: 40px 20px;
+      }
+      .logo {
+        margin-top: auto;
+        padding: 20px;
+        text-align: center;
+      }
+      .logo img {
+        width: 600px;
+        height: auto;
+      }
+      .page{max-width:900px; width:100%;}
+      h1{margin:0 0 18px 0; color:#0b2f6b}
+      .upload-form{display:flex; gap:12px; align-items:center; margin-bottom:18px}
+      .file-label{display:inline-flex; align-items:center; gap:10px; background:var(--card); padding:10px 14px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06);} 
+      .file-label input{display:none}
+      .btn{background:transparent; border:1px solid var(--accent); color:var(--accent); padding:8px 12px; border-radius:6px; text-decoration:none}
+      .btn.primary{background:var(--accent); color:#fff}
+      .files-container{padding-bottom:12px}
+      .files-with-action{display:flex; gap:20px; align-items:flex-start}
+      .files-with-action ul{margin:0; padding-left:18px; flex:1}
+      .files-with-action .btn{white-space:nowrap}
+      .output-window{background:var(--card); border:1px solid #e6e9f2; padding:16px; border-radius:8px; box-shadow:0 6px 18px rgba(23,45,88,0.06)}
+      .output-window h2{margin-top:0}
+      .output-block{border:1px solid #eef1fb; padding:10px; margin:10px 0; border-radius:6px; background:#fbfdff}
+      .output-block.error{border-color:#fdecea; background:#fff6f6}
+      pre{white-space:pre-wrap; word-break:break-word; margin:0; font-family:Consolas, monospace; font-size:13px}
+      .output-block.files ul{margin:8px 0 0 18px}
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Upload a .mi file</h1>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="messages">
+          <ul>
+          {% for m in messages %}
+            <li>{{ m }}</li>
+          {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="upload-form" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+      <label class="file-label">
+        <input type="file" name="file">
+        <span>Select a file…</span>
+      </label>
+      <button class="btn primary" type="submit">Upload</button>
+    </form>
+
+    <div class="output-window">
+      <h2>Converter output</h2>
+      {% if stdout %}
+        <div class="output-block">
+          <h3>Stdout</h3>
+          <pre>{{ stdout }}</pre>
+        </div>
+      {% endif %}
+
+      {% if stderr %}
+        <div class="output-block error">
+          <h3>Stderr</h3>
+          <pre>{{ stderr }}</pre>
+        </div>
+      {% endif %}
+
+      {% if files %}
+        <div class="output-block files-container">
+          <h3>Converted files</h3>
+          <div class="files-with-action">
+            <ul>
+              {% for f in files %}
+                <li><a href="/download/{{ f }}">{{ f.split('/')[-1] }}</a></li>
+              {% endfor %}
+            </ul>
+            {% if out_dir %}
+              <a class="btn primary" href="/download-all/{{ out_dir }}">Download all as ZIP</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    </div>
+    <div class="logo">
+      <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo">
+    </div>
+
+    <script>
+      // Show selected filename in the label when a file is chosen
+      document.addEventListener('DOMContentLoaded', function () {
+        const input = document.querySelector('.file-label input[type="file"]');
+        const labelText = document.querySelector('.file-label span');
+        function updateName() {
+          if (input && input.files && input.files.length > 0) {
+            labelText.textContent = input.files[0].name;
+          } else {
+            labelText.textContent = 'Select a file…';
+          }
+        }
+        if (input) {
+          input.addEventListener('change', updateName);
+        }
+      });
+    </script>
+
+  </body>
+</html>
