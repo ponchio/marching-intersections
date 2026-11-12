@@ -34,8 +34,6 @@ pending_events = []
 
 pending_shape_snapshots = []
 
-logged_events = set()
-
 is_processing = False
 
 next_id_counter = 1
@@ -387,7 +385,7 @@ def track_booleans(dummy):
 
             key = (
                 obj.as_pointer(),
-                mod.name,
+                mod.as_pointer(),
             )
 
             current[key] = {
@@ -426,20 +424,6 @@ def track_booleans(dummy):
     for key in disappeared:
 
         info = known_booleans[key]
-
-        event_key = (
-            info["target_ptr"],
-            info["modifier_name"],
-            info["tool_ptr"],
-            info["operation"]
-        )
-
-        if event_key in logged_events:
-            continue
-
-        logged_events.add(
-            event_key
-        )
 
         pending_events.append(
             info
@@ -631,8 +615,6 @@ def unregister():
 
     pending_events.clear()
     pending_shape_snapshots.clear()
-
-    logged_events.clear()
 
     print(
         "[BooleanAudit] unregistered"
