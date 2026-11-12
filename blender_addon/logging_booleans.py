@@ -249,10 +249,7 @@ def export_worldspace_snapshot(
 def save_shape_snapshot(obj):
 
     _, snap_dir = get_log_dir()
-    filename = (
-        f"created_{bpy.path.clean_name(obj.name)}_"
-        f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}.obj"
-    )
+    filename = f"{obj.name}.obj"
     filepath = os.path.join(snap_dir, filename)
 
     export_obj(
