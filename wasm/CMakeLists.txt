@@ -1,14 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
-project(marching_lib LANGUAGES CXX)
+
+if(NOT EMSCRIPTEN)
+    message(FATAL_ERROR "The WASM target requires the Emscripten toolchain. Configure with emcmake and -DBUILD_WASM=ON.")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-file(GLOB LIB_SOURCES "cpp/*.cpp")
-
-# Include the Emscripten binding source
-list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/emscripten.cpp")
-
-add_executable(marching_lib_wasm ${LIB_SOURCES})
+add_executable(marching_lib_wasm emscripten.cpp)
 set_target_properties(marching_lib_wasm PROPERTIES
     OUTPUT_NAME "marching_lib_wasm"
     SUFFIX ".js"

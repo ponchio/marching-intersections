@@ -5,10 +5,11 @@ cd build-wasm
 # Configure with Emscripten toolchain
 emcmake cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_CXX_STANDARD=17
+    -DCMAKE_CXX_STANDARD=17 \
+    -DBUILD_WASM=ON
 
 # Build target
-emmake make -j4
+emmake make -j4 marching_lib_wasm
 
 cd ..
 mkdir -p dist
