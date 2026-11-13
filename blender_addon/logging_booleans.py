@@ -26,9 +26,13 @@ BOOLEAN_TYPES = {
 
 known_booleans = {}
 
+known_objects = set()
+
+known_objects_initialized = False
+
 pending_events = []
 
-logged_events = set()
+pending_shape_snapshots = []
 
 is_processing = False
 
@@ -240,6 +244,22 @@ def export_worldspace_snapshot(
         )
 
 
+def save_shape_snapshot(obj):
+
+    _, snap_dir = get_log_dir()
+    filename = f"{obj.name}.obj"
+    filepath = os.path.join(snap_dir, filename)
+
+    export_obj(
+        filepath,
+        obj
+    )
+
+    print(
+        f"[BooleanAudit] Saved new-shape snapshot: {filepath}"
+    )
+
+
 # ============================================================
 # RECORDING
 # ============================================================
@@ -365,7 +385,7 @@ def track_booleans(dummy):
 
             key = (
                 obj.as_pointer(),
-                mod.name,
+                mod.as_pointer(),
             )
 
             current[key] = {
@@ -405,25 +425,65 @@ def track_booleans(dummy):
 
         info = known_booleans[key]
 
-        event_key = (
-            info["target_ptr"],
-            info["modifier_name"],
-            info["tool_ptr"],
-            info["operation"]
-        )
-
-        if event_key in logged_events:
-            continue
-
-        logged_events.add(
-            event_key
-        )
-
         pending_events.append(
             info
         )
 
     known_booleans = current
+
+
+@persistent
+def reset_known_objects(dummy):
+
+    global known_objects
+    global known_objects_initialized
+
+    known_objects = set(bpy.data.objects)
+    known_objects_initialized = True
+    pending_shape_snapshots.clear()
+
+    if (
+        check_new_shapes
+        not in bpy.app.handlers.depsgraph_update_post
+    ):
+        bpy.app.handlers.depsgraph_update_post.append(
+            check_new_shapes
+        )
+
+
+def initialize_shape_tracking():
+
+    global known_objects
+    global known_objects_initialized
+
+    if not known_objects_initialized:
+        known_objects = set(bpy.data.objects)
+        known_objects_initialized = True
+
+    if (
+        check_new_shapes
+        not in bpy.app.handlers.depsgraph_update_post
+    ):
+        bpy.app.handlers.depsgraph_update_post.append(
+            check_new_shapes
+        )
+
+
+@persistent
+def check_new_shapes(scene, depsgraph):
+
+    if is_processing or not known_objects_initialized:
+        return
+
+    current_objects = set(bpy.data.objects)
+    added_objects = current_objects - known_objects
+
+    for obj in added_objects:
+        if obj.type in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}:
+            pending_shape_snapshots.append(obj.as_pointer())
+
+    known_objects.clear()
+    known_objects.update(current_objects)
 
 
 # ============================================================
@@ -437,16 +497,23 @@ def process_pending_events():
     if is_processing:
         return 0.5
 
-    if not pending_events:
+    if not pending_events and not pending_shape_snapshots:
         return 0.5
 
     is_processing = True
 
     try:
 
-        event = pending_events.pop(0)
+        if pending_shape_snapshots:
+            obj = find_object_by_pointer(
+                pending_shape_snapshots.pop(0)
+            )
 
-        record_boolean(event)
+            if obj is not None:
+                save_shape_snapshot(obj)
+        else:
+            event = pending_events.pop(0)
+            record_boolean(event)
 
     except Exception as e:
 
@@ -469,8 +536,13 @@ def process_pending_events():
 def register():
 
     global known_booleans
+    global known_objects
+    global known_objects_initialized
 
     known_booleans = {}
+    known_objects = set()
+    known_objects_initialized = False
+    pending_shape_snapshots.clear()
 
     load_initial_counter()
 
@@ -480,6 +552,20 @@ def register():
     ):
         bpy.app.handlers.depsgraph_update_post.append(
             track_booleans
+        )
+
+    if (
+        reset_known_objects
+        not in bpy.app.handlers.load_post
+    ):
+        bpy.app.handlers.load_post.append(
+            reset_known_objects
+        )
+
+    if not bpy.app.timers.is_registered(initialize_shape_tracking):
+        bpy.app.timers.register(
+            initialize_shape_tracking,
+            first_interval=0.0
         )
 
     bpy.app.timers.register(
@@ -495,6 +581,7 @@ def register():
 def unregister():
 
     global known_booleans
+    global known_objects
 
     if (
         track_booleans
@@ -504,11 +591,30 @@ def unregister():
             track_booleans
         )
 
+    if (
+        check_new_shapes
+        in bpy.app.handlers.depsgraph_update_post
+    ):
+        bpy.app.handlers.depsgraph_update_post.remove(
+            check_new_shapes
+        )
+
+    if (
+        reset_known_objects
+        in bpy.app.handlers.load_post
+    ):
+        bpy.app.handlers.load_post.remove(
+            reset_known_objects
+        )
+
+    if bpy.app.timers.is_registered(initialize_shape_tracking):
+        bpy.app.timers.unregister(initialize_shape_tracking)
+
     known_booleans.clear()
+    known_objects.clear()
 
     pending_events.clear()
-
-    logged_events.clear()
+    pending_shape_snapshots.clear()
 
     print(
         "[BooleanAudit] unregistered"
