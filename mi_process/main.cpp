@@ -253,9 +253,10 @@ int runOperations(const fs::path &jsonPath, const fs::path &outputPath,
 			result->intersection(*target, *tool);
 		else
 			throw std::runtime_error("Unsupported boolean operation: " + type);
-		if(!result->checkConsistency())
+		std::string consistencyError;
+		if(!result->checkConsistency(&consistencyError))
 			throw std::runtime_error("Boolean operation " + std::to_string(i + 1) +
-									 " produced an inconsistent volume");
+								 " produced an inconsistent volume: " + consistencyError);
 
 		const std::string snapshot = requiredString(*targetRecord, "obj_snapshot");
 		results.emplace(pathKey(resolvePath(base, snapshot)), result);

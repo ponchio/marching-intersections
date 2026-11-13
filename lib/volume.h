@@ -6,6 +6,7 @@
 #include "box.h"
 #include "plane.h"
 
+#include <string>
 #include <vector>
 
 /* class mi::Volume :  a Marching Intersection Volume.
@@ -86,7 +87,7 @@ public:
 
 	/* sanity checks */
 	bool checkIntersectionParity() const;
-	bool checkConsistency() const;
+	bool checkConsistency(std::string *error = nullptr) const;
 
 	/* direct plane access for external editing (getters/setters) */
 	std::vector<int> getPlaneIndices(int plane) const;
@@ -103,10 +104,11 @@ private:
 
 	void resize(Box3i _box);
 	bool enforceConsistency(); // must be called after any op which relies on numeric precision on the intercepts
+	bool enforceConsistencyLegacy();
 
 	int  getCentroid(int id, std::vector<int> &visited, const Pos3i &pos, std::vector<Pos3f> &vert);
 	void triangulateOld(std::vector<char> &visited, const Pos3i &cube, std::vector<int> &faces);
-	bool checkConsistency(Vec3i p) const;
+	bool checkConsistency(Vec3i p, bool inside[3]) const;
 	bool enforceConsistency(Vec3i p);
 
 	void adjustNormalsForSweep( Vec3f i );

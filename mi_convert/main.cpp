@@ -450,8 +450,9 @@ int main(int argc, char *argv[]) {
 			throw std::string("Could not read or validate input volume: ") + files[0];
 		}
 
-		if(!volume.checkConsistency()) {
-			throw std::string("Invalid volume");
+		std::string consistencyError;
+		if(!volume.checkConsistency(&consistencyError)) {
+			throw std::string("Invalid volume: ") + consistencyError;
 		}
 		if(outputFormat == FileFormat::Obj) {
 			std::vector<Vec3f> vertices;

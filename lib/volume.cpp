@@ -6,6 +6,7 @@
 #include "dual_loom.h"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <cassert>
 #include <cstring>
@@ -109,7 +110,9 @@ void Volume::fromMesh(const std::vector<Pos3f> &overts, const std::vector<int> &
 		}
 	}
 
-	checkIntersectionParity();
+	bool success = checkIntersectionParity();
+	if(!success)
+		throw std::string("Parity check for intersections failed.");
 	enforceConsistency();
 	isClean = false;
 	cleanUp();
@@ -678,7 +681,7 @@ void Volume::fastSweep(const Volume &v, Vec3f start, Vec3f end, int subsample ) 
 		next /= 2;
 		if ( rest.SquaredNorm() == 0 ) break;
 		step.push_back( rest );
-		Log::debug << rest[0] << rest[1] << rest[2] << "\n";
+//		Log::debug << rest[0] << rest[1] << rest[2] << "\n";
 	}
 
 	*this = v;
@@ -858,12 +861,12 @@ bool Volume::checkIntersectionParity() const {
 				if((line.len%2) == 1) {
 					{
 						std::ostringstream oss;
+						oss << "Parity line wrong: ";
 						for(int i =0 ; i < line.size(); i++)
 							oss << line[i].p << ' ';
 						Log::debug << oss.str();
+						return false;
 					}
-
-					//exit(-1);
 				}
 			}
 		}
@@ -871,28 +874,22 @@ bool Volume::checkIntersectionParity() const {
 	return true;
 }
 
-bool Volume::checkConsistency(Vec3i p) const {
-	/*if (enforceConsistency(p) != -1 ) {
-		Log::debug << "Should never happen this.";
-	}*/
-
-	bool a = planes[0].isInside(toLocal(p, 0));
-	bool b = planes[1].isInside(toLocal(p, 1));
-	bool c = planes[2].isInside(toLocal(p, 2));
-
-
-	if(a != b || a != c) {
-		//Log::debug() << "OOOPSPPS!";
-		//Log::debug() << "p: " << p[0] << p[1] << p[2];
-		return false;
-	}
-	return true;
+bool Volume::checkConsistency(Vec3i p, bool inside[3]) const {
+	for(int axis = 0; axis < 3; ++axis)
+		inside[axis] = planes[axis].isInside(toLocal(p, axis));
+	return inside[0] == inside[1] && inside[1] == inside[2];
 }
 
 
-bool Volume::checkConsistency() const {
-	int count = 0;
-	int out_of_boundaries = 0;
+bool Volume::checkConsistency(std::string *error) const {
+	if(error)
+		error->clear();
+	auto report = [error](const std::string &message) {
+		if(error)
+			*error = message;
+		return false;
+	};
+
 	for(int i = 0; i < 3; i++) {
 		int zmin = toLocal(box.min, i)[2];
 		int zmax = toLocal(box.max, i)[2];
@@ -903,20 +900,39 @@ bool Volume::checkConsistency() const {
 				const Line &line = p.at(u, v);
 				for(int j = 0; j < line.size(); j++) {
 					const Intersection &in = line[j];
+					if(!std::isfinite(in.p)) {
+						std::ostringstream message;
+						message << "non-finite intersection in plane " << i << ", line ("
+								<< u << ", " << v << "), index " << j;
+						return report(message.str());
+					}
+					if(in.p < zmin || in.p >= zmax) {
+						std::ostringstream message;
+						message << "intersection " << in.p << " is outside box on axis " << i
+								<< " in plane " << i << ", line (" << u << ", " << v
+								<< "), index " << j << "; expected [" << zmin << ", " << zmax << ')';
+						return report(message.str());
+					}
 					int w = (int)floor(in.p + 0.5);
-					if (!checkConsistency(toGlobal(Vec3i(u, v, w),   i))) count++;
-					if (!checkConsistency(toGlobal(Vec3i(u, v, w-1), i))) count++;
-					if (!checkConsistency(toGlobal(Vec3i(u, v, w+1), i))) count++;
-					if(in.p < zmin || in.p >= zmax) out_of_boundaries++;
+					const int samples[3] = {w, w - 1, w + 1};
+					for(int sample : samples) {
+						const Vec3i point = toGlobal(Vec3i(u, v, sample), i);
+						bool inside[3];
+						if(!checkConsistency(point, inside)) {
+							std::ostringstream message;
+						message << "occupancy disagrees at grid point (" << point[0] << ", "
+								<< point[1] << ", " << point[2] << ") while checking plane "
+								<< i << ", line (" << u << ", " << v << "), intersection "
+								<< j << " at " << in.p << "; plane states ["
+								<< inside[0] << ", " << inside[1] << ", " << inside[2] << ']';
+							return report(message.str());
+						}
+					}
 				}
 			}
 		}
 	}
-	if(count)
-		Log::debug<<"Found"<<count<<"inconsistencies ("<<count/3<<"x 3 = " << count/3*3 << ")";
-	if(out_of_boundaries)
-		Log::debug<<"Found"<<count<<"out of boundaries ("<< out_of_boundaries << ")";
-	return count == 0;
+	return true;
 }
 
 #if STORE_NORMALS
@@ -962,7 +978,7 @@ bool Volume::enforceConsistency(Vec3i p) {
 	const float epsilon = 0.001;
 	bool move_all_inside = (total_cost[true] < total_cost[false]);
 	if(total_cost[move_all_inside] > 1) {
-		Log::debug << "INCAZZATI!";
+		//Log::debug << "INCAZZATI!";
 		return false;
 	}
 
@@ -980,6 +996,93 @@ bool Volume::enforceConsistency(Vec3i p) {
 
 
 bool Volume::enforceConsistency() {
+	std::vector<Vec3i> queue;
+	for(int axis = 0; axis < 3; ++axis) {
+		const Plane &plane = planes[axis];
+		for(int v = plane.box.min[1]; v < plane.box.max[1]; ++v) {
+			for(int u = plane.box.min[0]; u < plane.box.max[0]; ++u) {
+				const Line line = plane.at(u, v);
+				for(int i = 0; i < line.size(); ++i) {
+					const int w = static_cast<int>(floor(line[i].p));
+					for(int sample = w; sample <= w + 1; ++sample) {
+						const Vec3i point = toGlobal(Vec3i(u, v, sample), axis);
+						if(point[0] >= box.min[0] && point[0] < box.max[0] &&
+						   point[1] >= box.min[1] && point[1] < box.max[1] &&
+						   point[2] >= box.min[2] && point[2] < box.max[2])
+							queue.push_back(point);
+					}
+				}
+			}
+		}
+	}
+
+	auto addSmallIntersection = [this](int axis, const Vec3i &point) {
+		Plane &plane = planes[axis];
+		const Vec3i local = toLocal(point, axis);
+		const size_t lineIndex = static_cast<size_t>(plane.index(local[0], local[1]));
+		const int begin = plane.indices[lineIndex];
+		const int end = plane.indices[lineIndex + 1];
+		const float epsilon = 0.001f;
+		const float lower = static_cast<float>(point[axis]) - epsilon;
+		const float upper = static_cast<float>(point[axis]) + epsilon;
+		auto insertion = std::lower_bound(
+			plane.intersections.begin() + begin,
+			plane.intersections.begin() + end,
+			lower,
+			[](const Intersection &intersection, float value) {
+				return intersection.p < value;
+			});
+		const size_t offset = static_cast<size_t>(insertion - plane.intersections.begin());
+#if STORE_NORMALS
+		plane.intersections.insert(insertion, Intersection(lower, Vec3f(0, 0, 0)));
+		plane.intersections.insert(plane.intersections.begin() + offset + 1,
+							   Intersection(upper, Vec3f(0, 0, 0)));
+#else
+		plane.intersections.insert(insertion, Intersection(lower));
+		plane.intersections.insert(plane.intersections.begin() + offset + 1, Intersection(upper));
+#endif
+		for(size_t i = lineIndex + 1; i < plane.indices.size(); ++i)
+			plane.indices[i] += 2;
+		isClean = false;
+	};
+
+	const int neighborOffsets[6][3] = {
+		{1, 0, 0}, {-1, 0, 0},
+		{0, 1, 0}, {0, -1, 0},
+		{0, 0, 1}, {0, 0, -1}
+	};
+	size_t next = 0;
+	while(next < queue.size()) {
+		const Vec3i point = queue[next++];
+		bool inside[3];
+		if(checkConsistency(point, inside))
+			continue;
+
+		// Prefer the existing low-cost nudge when a nearby crossing can fix this point.
+		enforceConsistency(point);
+		if(!checkConsistency(point, inside)) {
+			const bool majorityInside =
+				static_cast<int>(inside[0]) + static_cast<int>(inside[1]) +
+				static_cast<int>(inside[2]) >= 2;
+			for(int axis = 0; axis < 3; ++axis)
+				if(inside[axis] != majorityInside)
+					addSmallIntersection(axis, point);
+		}
+
+		for(const auto &offset : neighborOffsets) {
+			const Vec3i neighbor(point[0] + offset[0],
+							 point[1] + offset[1],
+							 point[2] + offset[2]);
+			if(neighbor[0] >= box.min[0] && neighbor[0] < box.max[0] &&
+			   neighbor[1] >= box.min[1] && neighbor[1] < box.max[1] &&
+			   neighbor[2] >= box.min[2] && neighbor[2] < box.max[2])
+				queue.push_back(neighbor);
+		}
+	}
+	return true;
+}
+
+bool Volume::enforceConsistencyLegacy() {
 
 	int fixed = 0;
 	// first pass: detect which line to fix and where

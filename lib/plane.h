@@ -44,7 +44,7 @@ public:
 
 	Line at(int u, int v) {
 		if(u >= box.max[0] || v >= box.max[1] || u < box.min[0] || v < box.min[1]) {
-			Log::debug << "Ciccia: u: " << u << " v: " << v;
+			Log::debug << "U: " << u << " v: " << v;
 			Log::debug << box.min[0] << box.min[1] << "-" << box.max[0]  << box.max[1];
 			throw std::string("Out of bound at arguments in plane.");
 		}
