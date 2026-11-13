@@ -327,11 +327,12 @@ bool writeVolume(const mi::VolumeIo &io, FileFormat format, const std::string &p
 }
 
 void printUsage(const char *program) {
-	std::cerr << "Usage: " << program << " [-s step | -p percent] [-d | -m] <input.obj|input.mit|input.mib|input.mij> <output.obj|output.mit|output.mib|output.mij>\n"
+	std::cerr << "Usage: " << program << " [-s step | -p percent] [-d | -m] [-e] <input.obj|input.mit|input.mib|input.mij> <output.obj|output.mit|output.mib|output.mij>\n"
 			  << "  -s step     Absolute voxel spacing; required for OBJ input.\n"
 			  << "  -p percent  Voxel spacing as a percentage of the OBJ bounding-box diagonal; required for OBJ input.\n"
 			  << "  -d          Export a dual mesh (default).\n"
-			  << "  -m          Export a primal mesh.\n";
+			  << "  -m          Export a primal mesh.\n"
+			  << "  -e          Use the even-odd rule for OBJ input (default: oriented intersections).\n";
 }
 
 } // namespace
@@ -341,6 +342,7 @@ int main(int argc, char *argv[]) {
 	bool hasPercent = false;
 	bool hasDualOption = false;
 	bool dual = true;
+	bool useParity = false;
 	float step = 0.0f;
 	float percent = 0.0f;
 	std::vector<std::string> files;
@@ -354,6 +356,8 @@ int main(int argc, char *argv[]) {
 			}
 			hasDualOption = true;
 			dual = argument == "-d";
+		} else if(argument == "-e") {
+			useParity = true;
 		} else if(argument == "-s" || argument == "-p") {
 			if(i + 1 >= argc || hasStep || hasPercent) {
 				printUsage(argv[0]);
@@ -392,6 +396,11 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
+	if(useParity && inputFormat != FileFormat::Obj) {
+		std::cerr << "-e is only valid with OBJ input.\n";
+		return 2;
+	}
+
 	if(inputFormat == FileFormat::Obj || inputFormat == FileFormat::Ply) {
 		if(!hasStep && !hasPercent) {
 			std::cerr << "OBJ input requires either -s <step> or -p <percent>.\n";
@@ -407,7 +416,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	if((outputFormat == FileFormat::Obj || outputFormat == FileFormat::Ply) && hasDualOption) {
+	if((outputFormat != FileFormat::Obj && outputFormat != FileFormat::Ply) && hasDualOption) {
 		std::cerr << "-d and -m are only valid when output is OBJ.\n";
 		return 2;
 	}
@@ -444,7 +453,7 @@ int main(int argc, char *argv[]) {
 				step = bounds.Diag() * (percent / 100.0f);
 			if(!std::isfinite(step) || step <= 0.0f)
 				throw std::string("Sampling step must be positive and finite");
-			volume.fromMesh(vertices, faces, step);
+			volume.fromMesh(vertices, faces, step, useParity);
 
 		} else if(!readVolume(volumeIo, inputFormat, files[0])) {
 			throw std::string("Could not read or validate input volume: ") + files[0];
@@ -482,4 +491,3 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-

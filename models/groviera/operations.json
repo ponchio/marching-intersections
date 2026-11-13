@@ -4,8 +4,7 @@
     "timestamp": "2026-11-11T14:45:48.023077",
     "operation": "DIFFERENCE",
     "target": {
-      "name": "Cube",
-      "source": "cube.obj",
+      "name": "cube",
       "obj_snapshot": "000003_target.obj",
       "matrix_world": [
         [
@@ -35,7 +34,7 @@
       ]
     },
     "tool": {
-      "name": "Cone",
+      "name": "cone",
       "obj_snapshot": "cone.obj",
       "matrix_world": [
         [
@@ -70,8 +69,7 @@
     "timestamp": "2026-11-11T14:46:29.244180",
     "operation": "DIFFERENCE",
     "target": {
-      "name": "Cube",
-      "source": "000003_target.obj",
+      "name": "cube",
       "obj_snapshot": "000004_target.obj",
       "matrix_world": [
         [
@@ -101,7 +99,7 @@
       ]
     },
     "tool": {
-      "name": "Torus",
+      "name": "torus",
       "obj_snapshot": "torus.obj",
       "matrix_world": [
         [

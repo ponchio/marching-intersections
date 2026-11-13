@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <sstream>
 #include <cassert>
 #include <cstring>
@@ -33,6 +34,40 @@ void move(Pos3f &a) {
 			a[k] += 0.0011;
 	}
 }
+
+static int triangleWinding2D(const Pos3f &a, const Pos3f &b, const Pos3f &c) {
+	const double acx = static_cast<double>(a[0]) - c[0];
+	const double acy = static_cast<double>(a[1]) - c[1];
+	const double bcx = static_cast<double>(b[0]) - c[0];
+	const double bcy = static_cast<double>(b[1]) - c[1];
+	const double left = acx * bcy;
+	const double right = acy * bcx;
+	const double determinant = left - right;
+	const double errorBound = (3.0 + 16.0 * std::numeric_limits<double>::epsilon()) *
+			std::numeric_limits<double>::epsilon() * (std::fabs(left) + std::fabs(right));
+	if(determinant > errorBound)
+		return 1;
+	if(determinant < -errorBound)
+		return -1;
+
+	const long double lacx = static_cast<long double>(a[0]) - c[0];
+	const long double lacy = static_cast<long double>(a[1]) - c[1];
+	const long double lbcx = static_cast<long double>(b[0]) - c[0];
+	const long double lbcy = static_cast<long double>(b[1]) - c[1];
+	const long double lleft = lacx * lbcy;
+	const long double lright = lacy * lbcx;
+	const long double ldeterminant = lleft - lright;
+	const long double lerrorBound =
+			(3.0L + 16.0L * std::numeric_limits<long double>::epsilon()) *
+			std::numeric_limits<long double>::epsilon() *
+			(std::fabs(lleft) + std::fabs(lright));
+	if(ldeterminant > lerrorBound)
+		return 1;
+	if(ldeterminant < -lerrorBound)
+		return -1;
+	return 0;
+}
+
 /* Plane triangle/interval methods moved to lib/plane.cpp */
 
 void Volume::resize(Box3i _box) {
@@ -49,7 +84,7 @@ void Volume::resize(Box3i _box) {
 }
 
 
-void Volume::fromMesh(const std::vector<Pos3f> &overts, const std::vector<int> &faces, float _step) {
+void Volume::fromMesh(const std::vector<Pos3f> &overts, const std::vector<int> &faces, float _step, bool useParity) {
 	step = _step;
 
 	std::vector<Pos3f> verts = overts;
@@ -83,36 +118,107 @@ void Volume::fromMesh(const std::vector<Pos3f> &overts, const std::vector<int> &
 
 	resize(box);
 
-	std::vector< std::pair<int, Intersection > > results;
+	struct MeshIntersection {
+		int index;
+		Intersection intersection;
+		int direction;
+	};
+	std::vector<std::pair<int, Intersection> > triangleResults;
+	std::vector<MeshIntersection> results;
 
 	for(int pi = 0; pi < 3; pi++) {
+		triangleResults.clear();
 		results.clear();
 		Plane &p = planes[pi];
 		for(size_t i = 0; i < faces.size(); i += 3) {
 			const Pos3f &a = verts[faces[i]];
 			const Pos3f &b = verts[faces[i+1]];
 			const Pos3f &c = verts[faces[i+2]];
+			const Pos3f localA = toLocal(a, pi);
+			const Pos3f localB = toLocal(b, pi);
+			const Pos3f localC = toLocal(c, pi);
 #ifdef OLD_TRIANGULATOR
-			p.fillTriangleOld(toLocal(a, pi), toLocal(b, pi), toLocal(c, pi), results);
+			p.fillTriangleOld(localA, localB, localC, triangleResults);
 #else
-			p.fillTriangle(toLocal(a, pi), toLocal(b, pi), toLocal(c, pi), results);
+			p.fillTriangle(localA, localB, localC, triangleResults);
 #endif
-		}
-		for(size_t i = 0; i < results.size(); i++) {
-			p.indices[ results[i].first ]++;
+			const int direction = triangleWinding2D(localA, localB, localC);
+			for(size_t j = results.size(); j < triangleResults.size(); ++j)
+				results.push_back({triangleResults[j].first, triangleResults[j].second, direction});
 		}
 
-		planes[pi].accumulateLengths();
-		planes[pi].allocate();
+		for(const MeshIntersection &hit : results)
+			++p.indices[hit.index];
+		p.accumulateLengths();
+		p.allocate();
+		std::vector<int> next(p.indices.begin(), p.indices.end() - 1);
+		for(const MeshIntersection &hit : results)
+			p.intersections[next[hit.index]++] = hit.intersection;
 
-		for(size_t i = 0; i < results.size(); i++) {
-			p.at(results[i].first).insert(Intersection(results[i].second));
+		if(useParity) {
+			for(size_t line = 0; line + 1 < p.indices.size(); ++line) {
+				std::sort(
+					p.intersections.begin() + p.indices[line],
+					p.intersections.begin() + p.indices[line + 1],
+					[](const Intersection &a, const Intersection &b) { return a.p < b.p; });
+			}
+			continue;
 		}
+
+		std::vector<MeshIntersection> lineResults(results.size());
+		next.assign(p.indices.begin(), p.indices.end() - 1);
+		for(const MeshIntersection &hit : results)
+			lineResults[next[hit.index]++] = hit;
+
+		std::vector<Intersection> filtered;
+		filtered.reserve(results.size());
+		std::vector<int> filteredIndices(p.indices.size(), 0);
+		for(size_t line = 0; line + 1 < p.indices.size(); ++line) {
+			const size_t begin = p.indices[line];
+			const size_t end = p.indices[line + 1];
+			std::sort(
+				lineResults.begin() + begin,
+				lineResults.begin() + end,
+				[](const MeshIntersection &a, const MeshIntersection &b) {
+					return a.intersection.p < b.intersection.p;
+				});
+
+			bool haveEntry = false;
+			bool haveExit = false;
+			MeshIntersection entry;
+			MeshIntersection exit;
+			for(size_t i = begin; i < end; ++i) {
+				const MeshIntersection &hit = lineResults[i];
+				if(hit.direction < 0) {
+					if(!haveEntry) {
+						entry = hit;
+						haveEntry = true;
+					} else if(haveExit) {
+						filtered.push_back(entry.intersection);
+						filtered.push_back(exit.intersection);
+						entry = hit;
+						haveExit = false;
+					}
+				} else if(hit.direction > 0 && haveEntry) {
+					exit = hit;
+					haveExit = true;
+				}
+			}
+			if(haveEntry && haveExit) {
+				filtered.push_back(entry.intersection);
+				filtered.push_back(exit.intersection);
+			}
+			filteredIndices[line + 1] = static_cast<int>(filtered.size());
+		}
+
+		p.indices.swap(filteredIndices);
+		p.intersections.resize(filtered.size());
+		std::copy(filtered.begin(), filtered.end(), p.intersections.begin());
 	}
 
 	bool success = checkIntersectionParity();
 	if(!success)
-		throw std::string("Parity check for intersections failed.");
+		throw std::string(useParity ? "Parity check for intersections failed." : "Oriented intersections do not form closed intervals.");
 	enforceConsistency();
 	isClean = false;
 	cleanUp();
@@ -861,7 +967,8 @@ bool Volume::checkIntersectionParity() const {
 				if((line.len%2) == 1) {
 					{
 						std::ostringstream oss;
-						oss << "Parity line wrong: ";
+						oss << "Parity line not respected: ";
+						oss << "Plane: " << i << " u: " << u << "v: " << v << " intersections: ";
 						for(int i =0 ; i < line.size(); i++)
 							oss << line[i].p << ' ';
 						Log::debug << oss.str();
@@ -902,13 +1009,13 @@ bool Volume::checkConsistency(std::string *error) const {
 					const Intersection &in = line[j];
 					if(!std::isfinite(in.p)) {
 						std::ostringstream message;
-						message << "non-finite intersection in plane " << i << ", line ("
+						message << "Non-finite intersection in plane " << i << ", line ("
 								<< u << ", " << v << "), index " << j;
 						return report(message.str());
 					}
 					if(in.p < zmin || in.p >= zmax) {
 						std::ostringstream message;
-						message << "intersection " << in.p << " is outside box on axis " << i
+						message << "Intersection " << in.p << " is outside box on axis " << i
 								<< " in plane " << i << ", line (" << u << ", " << v
 								<< "), index " << j << "; expected [" << zmin << ", " << zmax << ')';
 						return report(message.str());
@@ -920,7 +1027,7 @@ bool Volume::checkConsistency(std::string *error) const {
 						bool inside[3];
 						if(!checkConsistency(point, inside)) {
 							std::ostringstream message;
-						message << "occupancy disagrees at grid point (" << point[0] << ", "
+						message << "Occupancy disagrees at grid point (" << point[0] << ", "
 								<< point[1] << ", " << point[2] << ") while checking plane "
 								<< i << ", line (" << u << ", " << v << "), intersection "
 								<< j << " at " << in.p << "; plane states ["

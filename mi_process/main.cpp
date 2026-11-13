@@ -2,6 +2,7 @@
 #include "mesh_io.h"
 #include "volume.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <cstdlib>
@@ -16,6 +17,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -99,55 +101,125 @@ void applyTransform(std::vector<Vec3f> &vertices, const Transform &transform) {
 	}
 }
 
-std::string sourceReference(const JsonValue &entity, bool allowSnapshotFallback) {
-	const JsonValue *source = member(entity, "source");
-	if(source) {
-		if(source->type != JsonValue::Type::String || source->string.empty())
-			throw std::runtime_error("source must be a non-empty string");
-		return source->string;
-	}
-	if(allowSnapshotFallback)
-		return requiredString(entity, "obj_snapshot");
-	throw std::runtime_error("Missing string field: source");
+bool sameTransform(const Transform &a, const Transform &b) {
+	for(size_t row = 0; row < 4; ++row)
+		for(size_t column = 0; column < 4; ++column)
+			if(a.matrix[row][column] != b.matrix[row][column])
+				return false;
+	return true;
 }
 
-VolumePtr loadOperand(const JsonValue &entity, bool allowSnapshotFallback,
-					  const fs::path &base, float step,
-					  const std::set<std::string> &snapshotKeys,
-					  const std::map<std::string, VolumePtr> &results,
-					  const std::string &outputKey) {
-	const fs::path sourcePath = resolvePath(base, sourceReference(entity, allowSnapshotFallback));
-	const std::string sourceKey = pathKey(sourcePath);
-	const auto result = results.find(sourceKey);
-	if(result != results.end())
-		return result->second;
-	if(snapshotKeys.count(sourceKey))
-		throw std::runtime_error("Referenced operation snapshot has not been produced: " +
-								 sourcePath.string());
-	if(sourceKey == outputKey)
-		throw std::runtime_error("Output path would overwrite an input OBJ: " +
-								 sourcePath.string());
+Transform inverseTransform(const Transform &transform) {
+	double augmented[4][8] = {};
+	for(size_t row = 0; row < 4; ++row) {
+		for(size_t column = 0; column < 4; ++column)
+			augmented[row][column] = transform.matrix[row][column];
+		augmented[row][row + 4] = 1.0;
+	}
 
-	std::vector<Vec3f> vertices;
-	std::vector<int> faces;
-	loadObj(sourcePath.string().c_str(), vertices, faces);
+	for(size_t column = 0; column < 4; ++column) {
+		size_t pivotRow = column;
+		for(size_t row = column + 1; row < 4; ++row)
+			if(std::fabs(augmented[row][column]) > std::fabs(augmented[pivotRow][column]))
+				pivotRow = row;
+		if(augmented[pivotRow][column] == 0.0)
+			throw std::runtime_error("Cannot change matrix_world for an object with a singular previous matrix");
+		if(pivotRow != column)
+			for(size_t i = 0; i < 8; ++i)
+				std::swap(augmented[pivotRow][i], augmented[column][i]);
+
+		const double pivot = augmented[column][column];
+		for(size_t i = 0; i < 8; ++i)
+			augmented[column][i] /= pivot;
+		for(size_t row = 0; row < 4; ++row) {
+			if(row == column)
+				continue;
+			const double factor = augmented[row][column];
+			for(size_t i = 0; i < 8; ++i)
+				augmented[row][i] -= factor * augmented[column][i];
+		}
+	}
+
+	Transform inverse;
+	for(size_t row = 0; row < 4; ++row)
+		for(size_t column = 0; column < 4; ++column) {
+			inverse.matrix[row][column] = augmented[row][column + 4];
+			if(!std::isfinite(inverse.matrix[row][column]))
+				throw std::runtime_error("Cannot invert matrix_world for a modified object");
+		}
+	return inverse;
+}
+
+struct ObjectState {
+	VolumePtr volume;
+	std::vector<Vec3f> sourceVertices;
+	std::vector<int> sourceFaces;
+	Transform transform;
+	bool modified = false;
+};
+
+void validateMesh(const fs::path &meshPath, const std::vector<Vec3f> &vertices,
+				  const std::vector<int> &faces) {
 	if(vertices.empty() || faces.empty() || faces.size() % 3 != 0)
 		throw std::runtime_error("OBJ must contain vertices and triangularized faces: " +
-								 sourcePath.string());
+								 meshPath.string());
 	for(const Vec3f &vertex : vertices)
 		for(int axis = 0; axis < 3; ++axis)
 			if(!std::isfinite(vertex[axis]))
 				throw std::runtime_error("OBJ contains a non-finite vertex: " +
-										 sourcePath.string());
+										 meshPath.string());
 	for(int index : faces)
 		if(index < 0 || static_cast<size_t>(index) >= vertices.size())
 			throw std::runtime_error("OBJ contains a face index outside the vertex array: " +
-									 sourcePath.string());
+									 meshPath.string());
+}
 
-	applyTransform(vertices, worldTransform(entity));
+VolumePtr volumeFromMesh(std::vector<Vec3f> vertices, const std::vector<int> &faces,
+						 float step) {
 	VolumePtr volume = std::make_shared<mi::Volume>();
 	volume->fromMesh(vertices, faces, step);
 	return volume;
+}
+
+ObjectState &resolveObject(const std::string &name, const Transform &transform,
+						   bool isTarget, const fs::path &base, float step,
+						   const std::string &outputKey,
+						   std::map<std::string, ObjectState> &objects) {
+	auto found = objects.find(name);
+	if(found == objects.end()) {
+		const fs::path meshPath = resolvePath(base, name + ".obj");
+		if(pathKey(meshPath) == outputKey)
+			throw std::runtime_error("Output path would overwrite an input OBJ: " +
+									 meshPath.string());
+
+		ObjectState object;
+		loadObj(meshPath.string().c_str(), object.sourceVertices, object.sourceFaces);
+		validateMesh(meshPath, object.sourceVertices, object.sourceFaces);
+		std::vector<Vec3f> vertices = object.sourceVertices;
+		applyTransform(vertices, transform);
+		object.volume = volumeFromMesh(std::move(vertices), object.sourceFaces, step);
+		object.transform = transform;
+		found = objects.emplace(name, std::move(object)).first;
+	} else if(!sameTransform(found->second.transform, transform)) {
+		ObjectState &object = found->second;
+		VolumePtr updatedVolume;
+		if(!isTarget && !object.modified) {
+			std::vector<Vec3f> vertices = object.sourceVertices;
+			applyTransform(vertices, transform);
+			updatedVolume = volumeFromMesh(std::move(vertices), object.sourceFaces, step);
+		} else {
+			std::vector<Vec3f> vertices;
+			std::vector<int> faces;
+			object.volume->toMesh(vertices, faces);
+			applyTransform(vertices, inverseTransform(object.transform));
+			applyTransform(vertices, transform);
+			updatedVolume = volumeFromMesh(std::move(vertices), faces, step);
+		}
+		object.volume = std::move(updatedVolume);
+		object.transform = transform;
+	}
+
+	return found->second;
 }
 
 JsonValue readOperations(const fs::path &path) {
@@ -217,22 +289,24 @@ int runOperations(const fs::path &jsonPath, const fs::path &outputPath,
 		throw std::runtime_error("Input JSON and output OBJ must be different files");
 
 	const JsonValue document = readOperations(absoluteJsonPath);
-	std::set<std::string> snapshotKeys;
+	std::vector<std::pair<double, const JsonValue *> > operations;
+	std::set<double> operationIds;
 	for(const JsonValue &operation : document.array) {
-		const JsonValue *target = member(operation, "target");
-		if(!target)
-			throw std::runtime_error("Operation is missing its target");
-		const std::string snapshot = requiredString(*target, "obj_snapshot");
-		if(!snapshotKeys.insert(pathKey(resolvePath(base, snapshot))).second)
-			throw std::runtime_error("Operation snapshots must have unique names: " + snapshot);
+		const JsonValue *id = member(operation, "id");
+		if(!id || id->type != JsonValue::Type::Number ||
+		   !std::isfinite(id->number) || std::floor(id->number) != id->number)
+			throw std::runtime_error("Each operation must have an integer id");
+		if(!operationIds.insert(id->number).second)
+			throw std::runtime_error("Operation ids must be unique");
+		operations.emplace_back(id->number, &operation);
 	}
-	if(snapshotKeys.count(outputKey))
-		throw std::runtime_error("Output path conflicts with an operation snapshot");
+	std::sort(operations.begin(), operations.end(),
+			  [](const auto &a, const auto &b) { return a.first < b.first; });
 
-	std::map<std::string, VolumePtr> results;
+	std::map<std::string, ObjectState> objects;
 	VolumePtr finalResult;
-	for(size_t i = 0; i < document.array.size(); ++i) {
-		const JsonValue &operation = document.array[i];
+	for(size_t i = 0; i < operations.size(); ++i) {
+		const JsonValue &operation = *operations[i].second;
 		const std::string type = requiredString(operation, "operation");
 		const JsonValue *targetRecord = member(operation, "target");
 		const JsonValue *toolRecord = member(operation, "tool");
@@ -240,27 +314,36 @@ int runOperations(const fs::path &jsonPath, const fs::path &outputPath,
 			throw std::runtime_error("Operation " + std::to_string(i + 1) +
 									 " must contain target and tool objects");
 
-		const VolumePtr target = loadOperand(*targetRecord, false, base, step,
-											 snapshotKeys, results, outputKey);
-		const VolumePtr tool = loadOperand(*toolRecord, true, base, step,
-										   snapshotKeys, results, outputKey);
+		if(type != "DIFFERENCE" && type != "UNION" &&
+		   type != "INTERSECTION" && type != "INTERSECT")
+			throw std::runtime_error("Unsupported boolean operation: " + type);
+
+		const std::string targetName = requiredString(*targetRecord, "name");
+		const std::string toolName = requiredString(*toolRecord, "name");
+		const Transform targetTransform = worldTransform(*targetRecord);
+		const Transform toolTransform = worldTransform(*toolRecord);
+		if(targetName == toolName && !sameTransform(targetTransform, toolTransform))
+			throw std::runtime_error("Target and tool with the same name must have the same matrix_world");
+
+		ObjectState &target = resolveObject(targetName, targetTransform, true,
+											base, step, outputKey, objects);
+		ObjectState &tool = resolveObject(toolName, toolTransform, false,
+										  base, step, outputKey, objects);
 		VolumePtr result = std::make_shared<mi::Volume>();
 		if(type == "DIFFERENCE")
-			result->subtraction(*target, *tool);
+			result->subtraction(*target.volume, *tool.volume);
 		else if(type == "UNION")
-			result->unification(*target, *tool);
+			result->unification(*target.volume, *tool.volume);
 		else if(type == "INTERSECTION" || type == "INTERSECT")
-			result->intersection(*target, *tool);
-		else
-			throw std::runtime_error("Unsupported boolean operation: " + type);
+			result->intersection(*target.volume, *tool.volume);
 		std::string consistencyError;
 		if(!result->checkConsistency(&consistencyError))
 			throw std::runtime_error("Boolean operation " + std::to_string(i + 1) +
 								 " produced an inconsistent volume: " + consistencyError);
 
-		const std::string snapshot = requiredString(*targetRecord, "obj_snapshot");
-		results.emplace(pathKey(resolvePath(base, snapshot)), result);
-		finalResult = result;
+		target.volume = result;
+		target.modified = true;
+		finalResult = target.volume;
 	}
 
 	std::vector<Vec3f> vertices;

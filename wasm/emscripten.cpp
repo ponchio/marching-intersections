@@ -6,7 +6,7 @@
 using namespace emscripten;
 
 // Helper to convert raw JS Float32Array and Uint32Array directly into Volume::fromMesh
-void volumeFromJSBuffers(mi::Volume& vol, val jsPositions, val jsIndices, float step) {
+void volumeFromJSBuffers(mi::Volume& vol, val jsPositions, val jsIndices, float step, bool useParity = true) {
     // Convert flat float array [x0, y0, z0, x1, y1, z1, ...] into std::vector<Pos3f>
     std::vector<float> rawPositions = vecFromJSArray<float>(jsPositions);
     std::vector<Pos3f> verts;
@@ -17,7 +17,7 @@ void volumeFromJSBuffers(mi::Volume& vol, val jsPositions, val jsIndices, float 
     }
     std::vector<int> faces = vecFromJSArray<int>(jsIndices);
 
-    vol.fromMesh(verts, faces, step);
+    vol.fromMesh(verts, faces, step, useParity);
 }
 
 struct MeshData {
@@ -147,7 +147,10 @@ EMSCRIPTEN_BINDINGS(marching_lib) {
         .constructor<>()
         .constructor<Box3i>()
         .property("step", &mi::Volume::step)
-        .function("fromMesh", &volumeFromJSBuffers)
+        .function("fromMesh", optional_override([](mi::Volume& vol, val jsPositions, val jsIndices, float step, val useParity) {
+            volumeFromJSBuffers(vol, jsPositions, jsIndices, step,
+                                useParity.isUndefined() || useParity.as<bool>());
+        }))
         .function("fromImplicitSphere", select_overload<void(ImplicitSphere, float)>(&mi::Volume::fromImplicit<ImplicitSphere>))
         .function("fromJSImplicit", +[](mi::Volume& vol, val jsFunc, Box3f bounds, float step) {
             JSImplicitWrapper wrapper(jsFunc, bounds);

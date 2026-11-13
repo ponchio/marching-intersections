@@ -41,7 +41,7 @@ public:
 	Volume(Box3i box);
 
 	/* creation */
-	void fromMesh(const std::vector<Pos3f> &verts, const std::vector<int> &faces, float step = 1);
+	void fromMesh(const std::vector<Pos3f> &verts, const std::vector<int> &faces, float step = 1, bool useParity = true);
 	void fromSweep(const std::vector<Pos3f> &verts, const std::vector<int> &faces, const Vec3f &start, const Vec3f &end, float step = 1);
 	template<class Implicit> void fromImplicit(Implicit function, float _step = 1);
 	void fullSolid(Box3i box); // a full bounding box [unimplemented]
