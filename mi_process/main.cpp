@@ -154,8 +154,11 @@ struct ObjectState {
 	VolumePtr volume;
 	std::vector<Vec3f> sourceVertices;
 	std::vector<int> sourceFaces;
+	std::vector<Vec3f> modifiedVertices;
+	std::vector<int> modifiedFaces;
 	Transform transform;
 	bool modified = false;
+	bool modifiedMeshCached = false;
 };
 
 void validateMesh(const fs::path &meshPath, const std::vector<Vec3f> &vertices,
@@ -177,7 +180,7 @@ void validateMesh(const fs::path &meshPath, const std::vector<Vec3f> &vertices,
 VolumePtr volumeFromMesh(std::vector<Vec3f> vertices, const std::vector<int> &faces,
 						 float step) {
 	VolumePtr volume = std::make_shared<mi::Volume>();
-	volume->fromMesh(vertices, faces, step);
+	volume->fromMesh(vertices, faces, step, false);
 	return volume;
 }
 
@@ -208,16 +211,18 @@ ObjectState &resolveObject(const std::string &name, const Transform &transform,
 			applyTransform(vertices, transform);
 			updatedVolume = volumeFromMesh(std::move(vertices), object.sourceFaces, step);
 		} else {
-			std::vector<Vec3f> vertices;
-			std::vector<int> faces;
-			object.volume->toMesh(vertices, faces);
-			applyTransform(vertices, inverseTransform(object.transform));
+			if(!object.modifiedMeshCached) {
+				object.volume->toMesh(object.modifiedVertices, object.modifiedFaces);
+				applyTransform(object.modifiedVertices, inverseTransform(object.transform));
+				object.modifiedMeshCached = true;
+			}
+			std::vector<Vec3f> vertices = object.modifiedVertices;
 			applyTransform(vertices, transform);
-			updatedVolume = volumeFromMesh(std::move(vertices), faces, step);
+			updatedVolume = volumeFromMesh(std::move(vertices), object.modifiedFaces, step);
 		}
 		object.volume = std::move(updatedVolume);
 		object.transform = transform;
-	}
+	}	
 
 	return found->second;
 }
@@ -343,6 +348,7 @@ int runOperations(const fs::path &jsonPath, const fs::path &outputPath,
 
 		target.volume = result;
 		target.modified = true;
+		target.modifiedMeshCached = false;
 		finalResult = target.volume;
 	}
 

@@ -20,11 +20,13 @@ static bool aisInside(float x, float y, const Pos2f &a, const Pos2f &b, float &r
 
 void Plane::fillTriangleOld(const Pos3f &a, const Pos3f &b, const Pos3f &c, std::vector<std::pair<int, Intersection > > & result) {
 
-    Vec2f e0(c[1] - a[1], a[0] - c[0]); //Magic.
-    Vec2f e1(a[1] - b[1], b[0] - a[0]);
-
-    float det = e0[0]*e1[1] - e0[1]*e1[0];
-    //if(fabs(det) < EPSILON) return;
+    const long double area =
+        (static_cast<long double>(b[0]) - a[0]) *
+            (static_cast<long double>(c[1]) - a[1]) -
+        (static_cast<long double>(b[1]) - a[1]) *
+            (static_cast<long double>(c[0]) - a[0]);
+    if(area == 0.0L)
+    return;
 
     //compute bounding box
     const int minx = (int)ceil (std::min(a[0], std::min(b[0], c[0])));
@@ -32,9 +34,8 @@ void Plane::fillTriangleOld(const Pos3f &a, const Pos3f &b, const Pos3f &c, std:
     const int maxx = (int)floor(std::max(a[0], std::max(b[0], c[0])));
     const int maxy = (int)floor(std::max(a[1], std::max(b[1], c[1])));
 
-    const float za = a[2]/det;
-    const float zb = b[2]/det;
-    const float zc = c[2]/det;
+    const long double minz = std::min(a[2], std::min(b[2], c[2]));
+    const long double maxz = std::max(a[2], std::max(b[2], c[2]));
 
     const Vec2f a2(a[0], a[1]);
     const Vec2f b2(b[0], b[1]);
@@ -57,7 +58,22 @@ void Plane::fillTriangleOld(const Pos3f &a, const Pos3f &b, const Pos3f &c, std:
 
             if((A != B || B != C)) continue;
 
-            float z = -(za*DA + zb*DB + zc*DC);
+                const long double px = x;
+                const long double py = y;
+                const long double wa =
+                    ((static_cast<long double>(b[0]) - px) *
+                         (static_cast<long double>(c[1]) - py) -
+                     (static_cast<long double>(b[1]) - py) *
+                         (static_cast<long double>(c[0]) - px)) / area;
+                const long double wb =
+                    ((static_cast<long double>(c[0]) - px) *
+                         (static_cast<long double>(a[1]) - py) -
+                     (static_cast<long double>(c[1]) - py) *
+                         (static_cast<long double>(a[0]) - px)) / area;
+                const long double wc = 1.0L - wa - wb;
+                const long double interpolatedZ =
+                    wa * a[2] + wb * b[2] + wc * c[2];
+                const float z = static_cast<float>(std::max(minz, std::min(maxz, interpolatedZ)));
 #if STORE_NORMALS
             result.push_back(std::make_pair( index(x, y), Intersection(z,n) ));
 #else
